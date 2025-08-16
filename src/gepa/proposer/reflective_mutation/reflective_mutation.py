@@ -94,16 +94,21 @@ class ReflectiveMutationProposer(ProposeNewCandidate):
             self.logger.log(f"Iteration {i}: No trajectories captured. Skipping.")
             return None
 
+        from gepa.gepa_utils import scores_sum
+
         state.total_num_evals += len(subsample_ids)
         state.full_program_trace[-1]["subsample_scores"] = eval_curr.scores
 
-        if self.skip_perfect_score and all(s >= self.perfect_score for s in eval_curr.scores):
+        if self.skip_perfect_score and all(
+            all(v >= self.perfect_score for v in (s.values() if isinstance(s, dict) else [s]))
+            for s in eval_curr.scores
+        ):
             self.logger.log(f"Iteration {i}: All subsample scores perfect. Skipping.")
             return None
 
         if self.use_wandb:
             import wandb  # type: ignore
-            wandb.log({"subsample_score": sum(eval_curr.scores)}, step=i)
+            wandb.log({"subsample_score": scores_sum(eval_curr.scores)}, step=i)
 
         # 2) Decide which predictors to update
         predictor_names_to_update = self.module_selector.select_modules(
@@ -139,7 +144,7 @@ class ReflectiveMutationProposer(ProposeNewCandidate):
         state.total_num_evals += len(subsample_ids)
         state.full_program_trace[-1]["new_subsample_scores"] = eval_new.scores
 
-        new_sum = sum(eval_new.scores)
+        new_sum = scores_sum(eval_new.scores)
         if self.use_wandb:
             import wandb  # type: ignore
             wandb.log({"new_subsample_score": new_sum}, step=i)

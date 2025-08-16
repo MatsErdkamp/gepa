@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from gepa.core.adapter import DataInst, RolloutOutput
 from gepa.core.state import GEPAState
-from gepa.gepa_utils import find_dominator_programs
+from gepa.gepa_utils import find_dominator_programs, Score, scores_sum
 from gepa.proposer.base import CandidateProposal, ProposeNewCandidate
 
 
@@ -169,7 +169,7 @@ class MergeProposer(ProposeNewCandidate):
         self,
         logger: Any,
         valset: list[DataInst],
-        evaluator: Callable[[list[DataInst], dict[str, str]], tuple[list[RolloutOutput], list[float]]],
+        evaluator: Callable[[list[DataInst], dict[str, str]], tuple[list[RolloutOutput], list[Score]]],
         use_merge: bool,
         max_merge_invocations: int,
         rng: random.Random | None = None,
@@ -198,13 +198,23 @@ class MergeProposer(ProposeNewCandidate):
 
     def select_eval_subsample_for_merged_program(
         self,
-        scores1: list[float],
-        scores2: list[float],
+        scores1: list[Score],
+        scores2: list[Score],
         num_subsample_ids: int = 5,
     ) -> list[int]:
+        from gepa.gepa_utils import score_to_scalar
+
         all_indices = set(range(len(scores1)))
-        p1 = [i for i, (s1, s2) in enumerate(zip(scores1, scores2, strict=False)) if s1 > s2]
-        p2 = [i for i, (s1, s2) in enumerate(zip(scores1, scores2, strict=False)) if s2 > s1]
+        p1 = [
+            i
+            for i, (s1, s2) in enumerate(zip(scores1, scores2, strict=False))
+            if score_to_scalar(s1) > score_to_scalar(s2)
+        ]
+        p2 = [
+            i
+            for i, (s1, s2) in enumerate(zip(scores1, scores2, strict=False))
+            if score_to_scalar(s2) > score_to_scalar(s1)
+        ]
         p3 = [i for i in all_indices if i not in p1 and i not in p2]
 
         n_each = math.ceil(num_subsample_ids / 3)
@@ -279,7 +289,7 @@ class MergeProposer(ProposeNewCandidate):
             candidate=new_program,
             parent_program_ids=[id1, id2],
             subsample_indices=subsample_ids,
-            subsample_scores_before=[sum(id1_sub_scores), sum(id2_sub_scores)],  # packed as [parent1_sum, parent2_sum]
+            subsample_scores_before=[scores_sum(id1_sub_scores), scores_sum(id2_sub_scores)],  # packed as [parent1_sum, parent2_sum]
             subsample_scores_after=new_sub_scores,
             tag="merge",
             metadata={"ancestor": ancestor}

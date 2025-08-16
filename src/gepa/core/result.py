@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Generic
 
 from gepa.core.adapter import RolloutOutput
+from gepa.gepa_utils import Score
 
 
 @dataclass(frozen=True)
@@ -15,7 +16,8 @@ class GEPAResult(Generic[RolloutOutput]):
     - candidates: list of proposed candidates (component_name -> component_text)
     - parents: lineage info; for each candidate i, parents[i] is a list of parent indices or None
     - val_aggregate_scores: per-candidate aggregate score on the validation set (higher is better)
-    - val_subscores: per-candidate per-instance scores on the validation set (len == num_val_instances)
+    - val_subscores: per-candidate per-instance scores on the validation set (len == num_val_instances).
+      Each score may be a float or a dict mapping objective name to float.
     - per_val_instance_best_candidates: for each val instance t, a set of candidate indices achieving the current best score on t
     - discovery_eval_counts: number of metric calls accumulated up to the discovery of each candidate
 
@@ -43,7 +45,7 @@ class GEPAResult(Generic[RolloutOutput]):
     candidates: list[dict[str, str]]
     parents: list[list[int | None]]
     val_aggregate_scores: list[float]
-    val_subscores: list[list[float]]
+    val_subscores: list[list[Score]]
     per_val_instance_best_candidates: list[set[int]]
     discovery_eval_counts: list[int]
 

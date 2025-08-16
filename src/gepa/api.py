@@ -13,7 +13,10 @@ from gepa.proposer.merge import MergeProposer
 from gepa.proposer.reflective_mutation.base import LanguageModel
 from gepa.proposer.reflective_mutation.reflective_mutation import ReflectiveMutationProposer
 from gepa.strategies.batch_sampler import EpochShuffledBatchSampler
-from gepa.strategies.candidate_selector import CurrentBestCandidateSelector, ParetoCandidateSelector
+from gepa.strategies.candidate_selector import (
+    CurrentBestCandidateSelector,
+    MultiObjectiveCandidateSelector,
+)
 from gepa.strategies.component_selector import RoundRobinReflectionComponentSelector
 
 
@@ -27,6 +30,11 @@ def optimize(
     # Reflection-based configuration
     reflection_lm: LanguageModel | str | None = None,
     candidate_selection_strategy: str = "pareto",
+    objectives: list[str] | None = None,
+    selection_strategy: str = "auto",
+    normalize: str = "zscore",
+    global_bonus: int = 3,
+    instance_sample_size: int | None = None,
     skip_perfect_score=True,
     reflection_minibatch_size=3,
     perfect_score=1,
@@ -140,7 +148,17 @@ def optimize(
         valset = trainset
 
     rng = random.Random(seed)
-    candidate_selector = ParetoCandidateSelector(rng=rng) if candidate_selection_strategy == "pareto" else CurrentBestCandidateSelector()
+    if candidate_selection_strategy == "pareto":
+        candidate_selector = MultiObjectiveCandidateSelector(
+            rng=rng,
+            objectives=objectives,
+            selection_strategy=selection_strategy,
+            normalize=normalize,
+            global_bonus=global_bonus,
+            instance_sample_size=instance_sample_size,
+        )
+    else:
+        candidate_selector = CurrentBestCandidateSelector()
     module_selector = RoundRobinReflectionComponentSelector()
     batch_sampler = EpochShuffledBatchSampler(minibatch_size=reflection_minibatch_size, rng=rng)
 

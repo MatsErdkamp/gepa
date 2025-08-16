@@ -1,6 +1,10 @@
 # Copyright (c) 2025 Lakshya A Agrawal and the GEPA contributors
 # https://github.com/gepa-ai/gepa
 
+from typing import Union, Iterable
+
+
+Score = Union[float, dict[str, float]]
 
 
 def json_default(x):
@@ -14,6 +18,27 @@ def idxmax(lst: list[float]) -> int:
     """Return the index of the maximum value in a list."""
     max_val = max(lst)
     return lst.index(max_val)
+
+
+def score_to_scalar(score: Score) -> float:
+    """Aggregate a score (float or dict of floats) to a scalar.
+
+    For multi-objective scores provided as dicts, we average over the
+    objective values to obtain a single representative scalar. This is used
+    for backward-compatible operations that expect a float.
+    """
+
+    if isinstance(score, dict):
+        if len(score) == 0:
+            return 0.0
+        return sum(score.values()) / len(score)
+    return float(score)
+
+
+def scores_sum(scores: Iterable[Score]) -> float:
+    """Sum a sequence of scores after aggregating them to scalars."""
+
+    return sum(score_to_scalar(s) for s in scores)
 
 def is_dominated(y, programs, program_at_pareto_front_valset):
     y_fronts = [front for front in program_at_pareto_front_valset if y in front]

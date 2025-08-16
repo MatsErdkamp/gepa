@@ -61,6 +61,27 @@ print("GEPA Optimized Prompt:", gepa_result.best_candidate['system_prompt'])
 
 Here, we can see the optimized prompt that GEPA generates for AIME, which achieves **improves GPT-4.1 Mini's performance from 46.6% to 56.6%, an improvement of 10%** on AIME 2025. Note the details captured in the prompts in just 2 iterations of GEPA. GEPA can be thought of as precomputing some reasoning (during optimization) to come up with a good plan for future task instances.
 
+### Multi-Objective Selection
+
+GEPA can optimize for multiple objectives by returning a dictionary of scores per instance. For example:
+
+```python
+def metric(output):
+    return {"correct": correct_score(output), "fun": fun_score(output)}
+
+gepa.optimize(
+    seed_candidate,
+    trainset,
+    valset,
+    adapter=my_adapter,
+    reflection_lm=my_reflection_lm,
+    objectives=["correct", "fun"],
+    selection_strategy="hybrid",
+)
+```
+
+Scores for each objective are normalized (`zscore` by default, `minmax` also available) before Pareto dominance tests. This preserves trade-offs between objectives while maintaining input diversity; see the [paper](https://arxiv.org/abs/2507.19457) for background.
+
 <table>
   <tr>
   <td colspan="2" align="center">Example GEPA Prompts</td>

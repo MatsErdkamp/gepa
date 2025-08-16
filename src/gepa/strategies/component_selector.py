@@ -5,6 +5,7 @@
 from gepa.core.adapter import Trajectory
 from gepa.core.state import GEPAState
 from gepa.proposer.reflective_mutation.base import ReflectionComponentSelector
+from gepa.gepa_utils import Score
 
 
 class RoundRobinReflectionComponentSelector(ReflectionComponentSelector):
@@ -12,7 +13,7 @@ class RoundRobinReflectionComponentSelector(ReflectionComponentSelector):
         self,
         state: GEPAState,
         trajectories: list[Trajectory],
-        subsample_scores: list[float],
+        subsample_scores: list[Score],
         candidate_idx: int,
         candidate: dict[str, str],
     ) -> list[str]:

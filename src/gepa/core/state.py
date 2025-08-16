@@ -6,7 +6,7 @@ import os
 from typing import Any, Callable, Generic
 
 from gepa.core.adapter import RolloutOutput
-from gepa.gepa_utils import idxmax, json_default
+from gepa.gepa_utils import idxmax, json_default, Score, score_to_scalar, scores_sum
 
 
 class GEPAState(Generic[RolloutOutput]):
@@ -17,7 +17,7 @@ class GEPAState(Generic[RolloutOutput]):
 
     program_at_pareto_front_valset: list[set[int]]
 
-    prog_candidate_val_subscores: list[list[float]]
+    prog_candidate_val_subscores: list[list[Score]]
 
     list_of_named_predictors: list[str]
     named_predictor_id_to_update_next_for_program_candidate: list[int]
@@ -33,16 +33,18 @@ class GEPAState(Generic[RolloutOutput]):
 
     per_program_tracked_scores: list[float]
 
+    is_multi_objective: bool
+
     best_outputs_valset: list[tuple[int, list[RolloutOutput]]] | None = None
 
     def __init__(
         self,
         seed_candidate: dict[str, str],
-        base_valset_eval_output: tuple[list[RolloutOutput], list[float]],
+        base_valset_eval_output: tuple[list[RolloutOutput], list[Score]],
         track_best_outputs: bool = False,
     ):
-        valset_base_score = sum(base_valset_eval_output[1]) / len(base_valset_eval_output[1])
-        base_valset_pareto_front = base_valset_eval_output[1]
+        valset_base_score = scores_sum(base_valset_eval_output[1]) / len(base_valset_eval_output[1])
+        base_valset_pareto_front = [score_to_scalar(s) for s in base_valset_eval_output[1]]
 
         self.program_candidates = [seed_candidate]
         self.program_full_scores_val_set = [valset_base_score]
@@ -58,6 +60,7 @@ class GEPAState(Generic[RolloutOutput]):
         self.i = -1
 
         self.prog_candidate_val_subscores = [base_valset_eval_output[1]]
+        self.is_multi_objective = isinstance(base_valset_eval_output[1][0], dict)
         self.num_metric_calls_by_discovery = [0]
 
         if track_best_outputs:
@@ -112,7 +115,7 @@ class GEPAState(Generic[RolloutOutput]):
         new_program: dict[str, str],
         valset_score: float,
         valset_outputs: Any,
-        valset_subscores: list[float],
+        valset_subscores: list[Score],
         run_dir: str | None,
         num_metric_calls_by_discovery_of_new_program: int
     ):
@@ -127,8 +130,9 @@ class GEPAState(Generic[RolloutOutput]):
         self.prog_candidate_val_subscores.append(valset_subscores)
         self.program_full_scores_val_set.append(valset_score)
         for task_idx, (old_score, new_score) in enumerate(zip(self.pareto_front_valset, valset_subscores, strict=False)):
-            if new_score > old_score:
-                self.pareto_front_valset[task_idx] = new_score
+            new_score_scalar = score_to_scalar(new_score)
+            if new_score_scalar > old_score:
+                self.pareto_front_valset[task_idx] = new_score_scalar
                 self.program_at_pareto_front_valset[task_idx] = {new_program_idx}
 
                 if self.best_outputs_valset is not None:
@@ -138,7 +142,7 @@ class GEPAState(Generic[RolloutOutput]):
                     os.makedirs(os.path.join(run_dir, "generated_best_outputs_valset", f"task_{task_idx}"), exist_ok=True)
                     with open(os.path.join(run_dir, "generated_best_outputs_valset", f"task_{task_idx}", f"iter_{self.i+1}_prog_{new_program_idx}.json"), "w") as f:
                         json.dump(valset_outputs[task_idx], f, indent=4, default=json_default)
-            elif new_score == old_score:
+            elif new_score_scalar == old_score:
                 self.program_at_pareto_front_valset[task_idx].add(new_program_idx)
                 if self.best_outputs_valset is not None:
                     self.best_outputs_valset[task_idx].append((new_program_idx, valset_outputs[task_idx]))
@@ -152,7 +156,7 @@ class GEPAState(Generic[RolloutOutput]):
         return new_program_idx, linear_pareto_front_program_idx
 
 def write_eval_output_to_directory(
-    eval_out: tuple[list[RolloutOutput], list[float]],
+    eval_out: tuple[list[RolloutOutput], list[Score]],
     output_dir: str
 ):
     for task_idx, score in enumerate(eval_out[1]):
@@ -164,7 +168,7 @@ def initialize_gepa_state(
     run_dir: str | None,
     logger,
     seed_candidate: dict[str, str],
-    valset_evaluator: Callable[[dict[str, str]], tuple[list[RolloutOutput], list[float]]],
+    valset_evaluator: Callable[[dict[str, str]], tuple[list[RolloutOutput], list[Score]]],
     track_best_outputs: bool = False,
 ):
     if run_dir is not None and os.path.exists(os.path.join(run_dir, "gepa_state.bin")) and os.path.exists(os.path.join(run_dir, "prog_candidates")):

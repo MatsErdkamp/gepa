@@ -2,7 +2,7 @@
 # https://github.com/gepa-ai/gepa
 
 from dataclasses import dataclass
-from typing import Any, Generic, Protocol, TypeVar
+from typing import Any, Generic, Protocol, TypeVar, Union
 
 # Generic type aliases matching your original
 RolloutOutput = TypeVar("RolloutOutput")
@@ -16,14 +16,16 @@ class EvaluationBatch(Generic[Trajectory, RolloutOutput]):
 
     - outputs: raw per-example outputs from upon executing the candidate. GEPA does not interpret these;
       they are forwarded to other parts of the user's code or logging as-is.
-    - scores: per-example numeric scores (floats). GEPA sums these for minibatch acceptance
-      and averages them over the full validation set for tracking/pareto fronts.
+    - scores: per-example numeric scores. Each score can either be a float or a
+      dictionary mapping objective name to float score. GEPA sums/averages these
+      scores for minibatch acceptance and validation tracking. When a dictionary
+      is provided, GEPA aggregates over the objective values.
     - trajectories: optional per-example traces used by make_reflective_dataset to build
       a reflective dataset (See `GEPAAdapter.make_reflective_dataset`). If capture_traces=True is passed to `evaluate`, trajectories
       should be provided and align one-to-one with `outputs` and `scores`.
     """
     outputs: list[RolloutOutput]
-    scores: list[float]
+    scores: list[Union[float, dict[str, float]]]
     trajectories: list[Trajectory] | None = None
 
 class ProposalFn(Protocol):
