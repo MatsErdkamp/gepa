@@ -5,6 +5,7 @@ import traceback
 from typing import Any, Callable, Generic
 
 from gepa.core.state import GEPAState, initialize_gepa_state
+from gepa.gepa_utils import sum_scores, scalarize_score
 from gepa.logging.utils import log_detailed_metrics_after_discovering_new_program
 from gepa.logging.wandb_utils import initialize_wandb
 from gepa.proposer.merge import MergeProposer
@@ -83,7 +84,17 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
         num_metric_calls_by_discovery = state.total_num_evals
 
         valset_outputs, valset_subscores = self._val_evaluator()(new_program)
-        valset_score = sum(valset_subscores) / len(valset_subscores)
+        if valset_subscores and isinstance(valset_subscores[0], dict):
+            objective_names = list(valset_subscores[0].keys())
+            obj_sums = {k: 0.0 for k in objective_names}
+            for sc in valset_subscores:
+                for k in objective_names:
+                    obj_sums[k] += sc.get(k, 0.0)
+            obj_means = {k: obj_sums[k] / len(valset_subscores) for k in objective_names}
+            valset_score = sum(obj_means.values()) / len(obj_means)
+        else:
+            obj_means = None
+            valset_score = sum(valset_subscores) / len(valset_subscores)
 
         state.num_full_ds_evals += 1
         state.total_num_evals += len(valset_subscores)
@@ -94,6 +105,7 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
             valset_score=valset_score,
             valset_outputs=valset_outputs,
             valset_subscores=valset_subscores,
+            valset_objective_scores=obj_means,
             run_dir=self.run_dir,
             num_metric_calls_by_discovery_of_new_program=num_metric_calls_by_discovery
         )
@@ -165,7 +177,8 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
 
                         if proposal is not None and proposal.tag == "merge":
                             parent_sums = proposal.subsample_scores_before or [float("-inf"), float("-inf")]
-                            new_sum = sum(proposal.subsample_scores_after or [])
+                            parent_sums = [scalarize_score(s) for s in parent_sums]
+                            new_sum = sum_scores(proposal.subsample_scores_after or [])
 
                             if new_sum >= max(parent_sums):
                                 # ACCEPTED: consume one merge attempt and record it
@@ -195,8 +208,8 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
                     continue
 
                 # Acceptance: require strict improvement on subsample
-                old_sum = sum(proposal.subsample_scores_before or [])
-                new_sum = sum(proposal.subsample_scores_after or [])
+                old_sum = sum_scores(proposal.subsample_scores_before or [])
+                new_sum = sum_scores(proposal.subsample_scores_after or [])
                 if new_sum <= old_sum:
                     self.logger.log(f"Iteration {state.i+1}: New subsample score is not better, skipping")
                     continue

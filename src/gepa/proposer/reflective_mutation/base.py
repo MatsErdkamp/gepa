@@ -17,7 +17,7 @@ class ReflectionComponentSelector(Protocol):
         self,
         state: GEPAState,
         trajectories: list[Trajectory],
-        subsample_scores: list[float],
+        subsample_scores: list,
         candidate_idx: int,
         candidate: dict[str, str],
     ) -> list[str]:

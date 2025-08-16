@@ -8,7 +8,7 @@ from typing import Any, Callable
 
 from gepa.core.adapter import DataInst, RolloutOutput
 from gepa.core.state import GEPAState
-from gepa.gepa_utils import find_dominator_programs
+from gepa.gepa_utils import find_dominator_programs, scalarize_score, sum_scores
 from gepa.proposer.base import CandidateProposal, ProposeNewCandidate
 
 
@@ -198,13 +198,15 @@ class MergeProposer(ProposeNewCandidate):
 
     def select_eval_subsample_for_merged_program(
         self,
-        scores1: list[float],
-        scores2: list[float],
+        scores1: list,
+        scores2: list,
         num_subsample_ids: int = 5,
     ) -> list[int]:
-        all_indices = set(range(len(scores1)))
-        p1 = [i for i, (s1, s2) in enumerate(zip(scores1, scores2, strict=False)) if s1 > s2]
-        p2 = [i for i, (s1, s2) in enumerate(zip(scores1, scores2, strict=False)) if s2 > s1]
+        s1 = [scalarize_score(s) for s in scores1]
+        s2 = [scalarize_score(s) for s in scores2]
+        all_indices = set(range(len(s1)))
+        p1 = [i for i, (a, b) in enumerate(zip(s1, s2, strict=False)) if a > b]
+        p2 = [i for i, (a, b) in enumerate(zip(s1, s2, strict=False)) if b > a]
         p3 = [i for i in all_indices if i not in p1 and i not in p2]
 
         n_each = math.ceil(num_subsample_ids / 3)
@@ -256,13 +258,15 @@ class MergeProposer(ProposeNewCandidate):
         self.merges_performed[0].append((id1, id2, ancestor))
         self.logger.log(f"Iteration {i}: Merged programs {id1} and {id2} via ancestor {ancestor}")
 
+        subs1 = state.prog_candidate_val_subscores[id1]
+        subs2 = state.prog_candidate_val_subscores[id2]
         subsample_ids = self.select_eval_subsample_for_merged_program(
-            state.prog_candidate_val_subscores[id1],
-            state.prog_candidate_val_subscores[id2],
+            subs1,
+            subs2,
         )
         mini_devset = [self.valset[k] for k in subsample_ids]
-        id1_sub_scores = [state.prog_candidate_val_subscores[id1][k] for k in subsample_ids]
-        id2_sub_scores = [state.prog_candidate_val_subscores[id2][k] for k in subsample_ids]
+        id1_sub_scores = [subs1[k] for k in subsample_ids]
+        id2_sub_scores = [subs2[k] for k in subsample_ids]
         state.full_program_trace[-1]["subsample_ids"] = subsample_ids
 
         _, new_sub_scores = self.evaluator(mini_devset, new_program)
@@ -279,7 +283,7 @@ class MergeProposer(ProposeNewCandidate):
             candidate=new_program,
             parent_program_ids=[id1, id2],
             subsample_indices=subsample_ids,
-            subsample_scores_before=[sum(id1_sub_scores), sum(id2_sub_scores)],  # packed as [parent1_sum, parent2_sum]
+            subsample_scores_before=[sum_scores(id1_sub_scores), sum_scores(id2_sub_scores)],  # packed as [parent1_sum, parent2_sum]
             subsample_scores_after=new_sub_scores,
             tag="merge",
             metadata={"ancestor": ancestor}

@@ -13,8 +13,8 @@ class CandidateProposal:
     parent_program_ids: list[int]
     # Optional mini-batch / subsample info
     subsample_indices: list[int] | None = None
-    subsample_scores_before: list[float] | None = None
-    subsample_scores_after: list[float] | None = None
+    subsample_scores_before: list[Any] | None = None
+    subsample_scores_after: list[Any] | None = None
     # Free-form metadata for logging/trace
     tag: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)

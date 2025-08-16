@@ -2,7 +2,7 @@
 # https://github.com/gepa-ai/gepa
 
 import random
-from typing import Any
+from typing import Any, Literal
 
 from gepa.adapters.default_adapter.default_adapter import DefaultAdapter
 from gepa.core.adapter import DataInst, GEPAAdapter, RolloutOutput, Trajectory
@@ -49,6 +49,12 @@ def optimize(
 
     # Reproducibility
     seed: int = 0,
+
+    objectives: list[str] | None = None,
+    selection_strategy: Literal["auto", "instance_pareto", "objective_pareto", "hybrid"] = "auto",
+    normalize: Literal["zscore", "minmax"] = "zscore",
+    global_bonus: int = 3,
+    instance_sample_size: int | None = None,
 ):
     """
     GEPA is an evolutionary optimizer that evolves (multiple) text components of a complex system to optimize them towards a given metric.
@@ -140,7 +146,18 @@ def optimize(
         valset = trainset
 
     rng = random.Random(seed)
-    candidate_selector = ParetoCandidateSelector(rng=rng) if candidate_selection_strategy == "pareto" else CurrentBestCandidateSelector()
+    candidate_selector = (
+        ParetoCandidateSelector(
+            rng=rng,
+            selection_strategy=selection_strategy,
+            objectives=objectives,
+            normalize=normalize,
+            global_bonus=global_bonus,
+            instance_sample_size=instance_sample_size,
+        )
+        if candidate_selection_strategy == "pareto"
+        else CurrentBestCandidateSelector()
+    )
     module_selector = RoundRobinReflectionComponentSelector()
     batch_sampler = EpochShuffledBatchSampler(minibatch_size=reflection_minibatch_size, rng=rng)
 

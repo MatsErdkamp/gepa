@@ -6,7 +6,7 @@ import os
 from typing import Any, Callable, Generic
 
 from gepa.core.adapter import RolloutOutput
-from gepa.gepa_utils import idxmax, json_default
+from gepa.gepa_utils import idxmax, json_default, scalarize_score
 
 
 class GEPAState(Generic[RolloutOutput]):
@@ -17,7 +17,12 @@ class GEPAState(Generic[RolloutOutput]):
 
     program_at_pareto_front_valset: list[set[int]]
 
-    prog_candidate_val_subscores: list[list[float]]
+    prog_candidate_val_subscores: list[list]
+
+    program_objective_scores_val_set: list[dict[str, float]] | None
+
+    is_multi_objective: bool
+    objective_names: list[str] | None
 
     list_of_named_predictors: list[str]
     named_predictor_id_to_update_next_for_program_candidate: list[int]
@@ -38,11 +43,27 @@ class GEPAState(Generic[RolloutOutput]):
     def __init__(
         self,
         seed_candidate: dict[str, str],
-        base_valset_eval_output: tuple[list[RolloutOutput], list[float]],
+        base_valset_eval_output: tuple[list[RolloutOutput], list],
         track_best_outputs: bool = False,
     ):
-        valset_base_score = sum(base_valset_eval_output[1]) / len(base_valset_eval_output[1])
-        base_valset_pareto_front = base_valset_eval_output[1]
+        base_scores = base_valset_eval_output[1]
+        if base_scores and isinstance(base_scores[0], dict):
+            self.is_multi_objective = True
+            self.objective_names = list(base_scores[0].keys())
+            obj_sums = {k: 0.0 for k in self.objective_names}
+            for sc in base_scores:
+                for k in self.objective_names:
+                    obj_sums[k] += sc.get(k, 0.0)
+            obj_means = {k: obj_sums[k] / len(base_scores) for k in self.objective_names}
+            valset_base_score = sum(obj_means.values()) / len(obj_means)
+            base_valset_pareto_front = [sum(sc.values()) / len(sc) for sc in base_scores]
+            self.program_objective_scores_val_set = [obj_means]
+        else:
+            self.is_multi_objective = False
+            self.objective_names = None
+            valset_base_score = sum(base_scores) / len(base_scores)
+            base_valset_pareto_front = base_scores
+            self.program_objective_scores_val_set = None
 
         self.program_candidates = [seed_candidate]
         self.program_full_scores_val_set = [valset_base_score]
@@ -112,9 +133,10 @@ class GEPAState(Generic[RolloutOutput]):
         new_program: dict[str, str],
         valset_score: float,
         valset_outputs: Any,
-        valset_subscores: list[float],
+        valset_subscores: list,
         run_dir: str | None,
-        num_metric_calls_by_discovery_of_new_program: int
+        num_metric_calls_by_discovery_of_new_program: int,
+        valset_objective_scores: dict[str, float] | None = None,
     ):
         new_program_idx = len(self.program_candidates)
         self.program_candidates.append(new_program)
@@ -125,8 +147,14 @@ class GEPAState(Generic[RolloutOutput]):
         self.parent_program_for_candidate.append([p for p in parent_program_idx])
 
         self.prog_candidate_val_subscores.append(valset_subscores)
+        if self.is_multi_objective and self.program_objective_scores_val_set is not None:
+            assert valset_objective_scores is not None
+            self.program_objective_scores_val_set.append(valset_objective_scores)
+            scalar_subscores = [scalarize_score(s) for s in valset_subscores]
+        else:
+            scalar_subscores = valset_subscores  # type: ignore
         self.program_full_scores_val_set.append(valset_score)
-        for task_idx, (old_score, new_score) in enumerate(zip(self.pareto_front_valset, valset_subscores, strict=False)):
+        for task_idx, (old_score, new_score) in enumerate(zip(self.pareto_front_valset, scalar_subscores, strict=False)):
             if new_score > old_score:
                 self.pareto_front_valset[task_idx] = new_score
                 self.program_at_pareto_front_valset[task_idx] = {new_program_idx}
@@ -143,12 +171,12 @@ class GEPAState(Generic[RolloutOutput]):
                 if self.best_outputs_valset is not None:
                     self.best_outputs_valset[task_idx].append((new_program_idx, valset_outputs[task_idx]))
 
-        assert len(valset_subscores) == len(self.program_at_pareto_front_valset)
+        assert len(scalar_subscores) == len(self.program_at_pareto_front_valset)
 
         self.per_program_tracked_scores = self.program_full_scores_val_set
 
         linear_pareto_front_program_idx = idxmax(self.per_program_tracked_scores)
-
+        
         return new_program_idx, linear_pareto_front_program_idx
 
 def write_eval_output_to_directory(

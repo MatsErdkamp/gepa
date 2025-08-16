@@ -12,6 +12,7 @@ from gepa.proposer.reflective_mutation.base import (
     LanguageModel,
     ReflectionComponentSelector,
 )
+from gepa.gepa_utils import scalarize_score, sum_scores
 
 
 class ReflectiveMutationProposer(ProposeNewCandidate):
@@ -97,13 +98,14 @@ class ReflectiveMutationProposer(ProposeNewCandidate):
         state.total_num_evals += len(subsample_ids)
         state.full_program_trace[-1]["subsample_scores"] = eval_curr.scores
 
-        if self.skip_perfect_score and all(s >= self.perfect_score for s in eval_curr.scores):
+        scalar_scores_before = [scalarize_score(s) for s in eval_curr.scores]
+        if self.skip_perfect_score and all(s >= self.perfect_score for s in scalar_scores_before):
             self.logger.log(f"Iteration {i}: All subsample scores perfect. Skipping.")
             return None
 
         if self.use_wandb:
             import wandb  # type: ignore
-            wandb.log({"subsample_score": sum(eval_curr.scores)}, step=i)
+            wandb.log({"subsample_score": sum_scores(eval_curr.scores)}, step=i)
 
         # 2) Decide which predictors to update
         predictor_names_to_update = self.module_selector.select_modules(
@@ -139,7 +141,7 @@ class ReflectiveMutationProposer(ProposeNewCandidate):
         state.total_num_evals += len(subsample_ids)
         state.full_program_trace[-1]["new_subsample_scores"] = eval_new.scores
 
-        new_sum = sum(eval_new.scores)
+        new_sum = sum_scores(eval_new.scores)
         if self.use_wandb:
             import wandb  # type: ignore
             wandb.log({"new_subsample_score": new_sum}, step=i)
