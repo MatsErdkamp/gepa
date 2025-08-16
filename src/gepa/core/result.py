@@ -49,6 +49,9 @@ class GEPAResult(Generic[RolloutOutput]):
 
     # Optional data
     best_outputs_valset: list[list[tuple[int, list[RolloutOutput]]]] | None = None
+    program_objective_scores: list[dict[str, float]] | None = None
+    objectives: list[str] | None = None
+    is_multi_objective: bool = False
 
     # Run metadata (optional)
     total_metric_calls: int | None = None
@@ -88,6 +91,9 @@ class GEPAResult(Generic[RolloutOutput]):
             best_outputs_valset=self.best_outputs_valset,
             per_val_instance_best_candidates=[list(s) for s in self.per_val_instance_best_candidates],
             discovery_eval_counts=self.discovery_eval_counts,
+            program_objective_scores=self.program_objective_scores,
+            objectives=self.objectives,
+            is_multi_objective=self.is_multi_objective,
             total_metric_calls=self.total_metric_calls,
             num_full_val_evals=self.num_full_val_evals,
             run_dir=self.run_dir,
@@ -108,6 +114,9 @@ class GEPAResult(Generic[RolloutOutput]):
             val_subscores=[list(s) for s in state.prog_candidate_val_subscores],
             per_val_instance_best_candidates=[set(s) for s in state.program_at_pareto_front_valset],
             discovery_eval_counts=list(state.num_metric_calls_by_discovery),
+            program_objective_scores=getattr(state, "program_objective_scores", None),
+            objectives=getattr(state, "objectives", None),
+            is_multi_objective=getattr(state, "is_multi_objective", False),
             total_metric_calls=getattr(state, "total_num_evals", None),
             num_full_val_evals=getattr(state, "num_full_ds_evals", None),
             run_dir=run_dir,

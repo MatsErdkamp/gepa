@@ -246,6 +246,28 @@ pip install terminal-bench
 python src/gepa/examples/terminal-bench/train_terminus.py --model_name=gpt-5-mini
 ```
 
+### Multi-Objective Selection
+
+Some tasks demand balancing multiple evaluation signals (e.g., correctness and entertainment for a tweet bot). GEPA supports
+metrics that return a dictionary of objective scores and can preserve Pareto-optimal trade-offs across them.
+
+```python
+def metric(outputs) -> dict[str, float]:
+    return {"correct": correctness(outputs), "fun": fun_score(outputs)}
+
+gepa.optimize(
+    seed_candidate=seed_candidate,
+    trainset=trainset,
+    valset=valset,
+    adapter=adapter,
+    objectives=["correct", "fun"],
+    selection_strategy="hybrid",
+)
+```
+
+Objectives are normalized (z-score by default, or min-max) before dominance checks. See the
+[GEPA paper](https://arxiv.org/abs/2507.19457) for the motivation and design details.
+
 ## How does GEPA work
 
 GEPA optimizes text components of systems using an evolutionary search algorithm that uses LLM-based reflection for mutating candidates. Most importantly, GEPA leverages task-specific textual feedback (for example, compiler error messages, profiler performance reports, documentation, etc.) to guide the search process. For further details, refer to the paper: [GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning](https://arxiv.org/abs/2507.19457).

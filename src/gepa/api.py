@@ -31,6 +31,13 @@ def optimize(
     reflection_minibatch_size=3,
     perfect_score=1,
 
+    # Multi-objective selection configuration
+    objectives: list[str] | None = None,
+    selection_strategy: str = "auto",
+    normalize: str = "zscore",
+    global_bonus: int = 3,
+    instance_sample_size: int | None = None,
+
     # Merge-based configuration
     use_merge=False,
     max_merge_invocations=5,
@@ -140,7 +147,18 @@ def optimize(
         valset = trainset
 
     rng = random.Random(seed)
-    candidate_selector = ParetoCandidateSelector(rng=rng) if candidate_selection_strategy == "pareto" else CurrentBestCandidateSelector()
+    candidate_selector = (
+        ParetoCandidateSelector(
+            rng=rng,
+            objectives=objectives,
+            selection_strategy=selection_strategy,
+            normalize=normalize,
+            global_bonus=global_bonus,
+            instance_sample_size=instance_sample_size,
+        )
+        if candidate_selection_strategy == "pareto"
+        else CurrentBestCandidateSelector()
+    )
     module_selector = RoundRobinReflectionComponentSelector()
     batch_sampler = EpochShuffledBatchSampler(minibatch_size=reflection_minibatch_size, rng=rng)
 
@@ -192,6 +210,7 @@ def optimize(
         wandb_api_key=wandb_api_key,
         wandb_init_kwargs=wandb_init_kwargs,
         track_best_outputs=track_best_outputs,
+        objectives=objectives,
     )
     state = engine.run()
     result = GEPAResult.from_state(state)
