@@ -250,6 +250,25 @@ python src/gepa/examples/terminal-bench/train_terminus.py --model_name=gpt-5-min
 
 GEPA optimizes text components of systems using an evolutionary search algorithm that uses LLM-based reflection for mutating candidates. Most importantly, GEPA leverages task-specific textual feedback (for example, compiler error messages, profiler performance reports, documentation, etc.) to guide the search process. For further details, refer to the paper: [GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning](https://arxiv.org/abs/2507.19457).
 
+### Multi-Objective Selection
+
+GEPA can preserve trade-offs across multiple objectives by letting the metric return a dictionary of scores (see [paper](https://arxiv.org/abs/2507.19457) for discussion). For example:
+
+```python
+def metric(output):
+    return {"correct": score_correct(output), "fun": score_fun(output)}
+
+gepa_result = gepa.optimize(
+    seed_candidate=my_prog,
+    trainset=train_data,
+    valset=val_data,
+    objectives=["correct", "fun"],
+    selection_strategy="hybrid",
+)
+```
+
+GEPA normalizes per-objective scores (z-score by default) before computing Pareto fronts so objectives on different scales can be compared.
+
 ## Contributions
 
 We encourage the community and users to help us develop adapters to allow GEPA to be used for optimizing all kinds of systems leveraging textual components. Refer to [DSPy/GEPAAdapter](https://github.com/stanfordnlp/dspy/tree/main/dspy/teleprompt/gepa/gepa_utils.py) and [src/gepa/adapters/](src/gepa/adapters/) for example `GEPAAdapter` implementations. Please feel free to flag any problems faced as issues.

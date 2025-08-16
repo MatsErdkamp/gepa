@@ -27,6 +27,11 @@ def optimize(
     # Reflection-based configuration
     reflection_lm: LanguageModel | str | None = None,
     candidate_selection_strategy: str = "pareto",
+    objectives: list[str] | None = None,
+    selection_strategy: str = "auto",
+    normalize: str = "zscore",
+    global_bonus: int = 3,
+    instance_sample_size: int | None = None,
     skip_perfect_score=True,
     reflection_minibatch_size=3,
     perfect_score=1,
@@ -140,7 +145,18 @@ def optimize(
         valset = trainset
 
     rng = random.Random(seed)
-    candidate_selector = ParetoCandidateSelector(rng=rng) if candidate_selection_strategy == "pareto" else CurrentBestCandidateSelector()
+    candidate_selector = (
+        ParetoCandidateSelector(
+            rng=rng,
+            selection_strategy=selection_strategy,
+            objectives=objectives,
+            normalize=normalize,
+            global_bonus=global_bonus,
+            instance_sample_size=instance_sample_size,
+        )
+        if candidate_selection_strategy == "pareto"
+        else CurrentBestCandidateSelector()
+    )
     module_selector = RoundRobinReflectionComponentSelector()
     batch_sampler = EpochShuffledBatchSampler(minibatch_size=reflection_minibatch_size, rng=rng)
 

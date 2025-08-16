@@ -83,7 +83,11 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
         num_metric_calls_by_discovery = state.total_num_evals
 
         valset_outputs, valset_subscores = self._val_evaluator()(new_program)
-        valset_score = sum(valset_subscores) / len(valset_subscores)
+        scalar_subscores = [
+            sum(s.values()) / len(s) if isinstance(s, dict) else s
+            for s in valset_subscores
+        ]
+        valset_score = sum(scalar_subscores) / len(scalar_subscores)
 
         state.num_full_ds_evals += 1
         state.total_num_evals += len(valset_subscores)

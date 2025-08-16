@@ -73,9 +73,18 @@ def find_dominator_programs(pareto_front_programs, train_val_weighted_agg_scores
     uniq_progs = set(uniq_progs)
     return list(uniq_progs)
 
-def select_program_candidate_from_pareto_front(pareto_front_programs, train_val_weighted_agg_scores_for_all_programs, rng):
+def select_program_candidate_from_pareto_front(
+    pareto_front_programs,
+    train_val_weighted_agg_scores_for_all_programs,
+    rng,
+    instance_sample_size=None,
+):
     train_val_pareto_front_programs = pareto_front_programs
-    new_program_at_pareto_front_valset = remove_dominated_programs(train_val_pareto_front_programs, scores=train_val_weighted_agg_scores_for_all_programs)
+    if instance_sample_size is not None and len(train_val_pareto_front_programs) > instance_sample_size:
+        train_val_pareto_front_programs = rng.sample(train_val_pareto_front_programs, instance_sample_size)
+    new_program_at_pareto_front_valset = remove_dominated_programs(
+        train_val_pareto_front_programs, scores=train_val_weighted_agg_scores_for_all_programs
+    )
     program_frequency_in_validation_pareto_front = {}
     for testcase_pareto_front in new_program_at_pareto_front_valset:
         for prog_idx in testcase_pareto_front:
@@ -83,7 +92,11 @@ def select_program_candidate_from_pareto_front(pareto_front_programs, train_val_
                 program_frequency_in_validation_pareto_front[prog_idx] = 0
             program_frequency_in_validation_pareto_front[prog_idx] += 1
 
-    sampling_list = [prog_idx for prog_idx, freq in program_frequency_in_validation_pareto_front.items() for _ in range(freq)]
+    sampling_list = [
+        prog_idx
+        for prog_idx, freq in program_frequency_in_validation_pareto_front.items()
+        for _ in range(freq)
+    ]
     assert len(sampling_list) > 0
     curr_prog_id = rng.choice(sampling_list)
     return curr_prog_id
