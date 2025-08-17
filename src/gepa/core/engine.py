@@ -20,7 +20,7 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
     def __init__(
         self,
         run_dir: str | None,
-        evaluator: Callable[[list[DataInst], dict[str, str]], tuple[list[RolloutOutput], list[float]]],
+        evaluator: Callable[[list[DataInst], dict[str, str]], tuple[list[RolloutOutput], list[dict[str, float]]]],
         valset: list[DataInst] | None,
         seed_candidate: dict[str, str],
         # Controls
@@ -37,6 +37,7 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
         wandb_api_key: str | None = None,
         wandb_init_kwargs: dict[str, Any] | None = None,
         track_best_outputs: bool = False,
+        pareto_frontier_type: str = "instance",
     ):
         # Budget constraint: exactly one of max_metric_calls or num_iters must be set
         assert (max_metric_calls is not None) + (num_iters is not None) == 1, \
@@ -61,13 +62,15 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
         self.reflective_proposer = reflective_proposer
         self.merge_proposer = merge_proposer
 
+        self.pareto_frontier_type = pareto_frontier_type
+
         # Merge scheduling flags (mirroring previous behavior)
         if self.merge_proposer is not None:
             self.merge_proposer.last_iter_found_new_program = False
 
         self.track_best_outputs = track_best_outputs
 
-    def _val_evaluator(self) -> Callable[[dict[str, str]], tuple[list[RolloutOutput], list[float]]]:
+    def _val_evaluator(self) -> Callable[[dict[str, str]], tuple[list[RolloutOutput], list[dict[str, float]]]]:
         assert self.valset is not None
         return lambda prog: self.evaluator(self.valset, prog)
 
@@ -83,7 +86,7 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
         num_metric_calls_by_discovery = state.total_num_evals
 
         valset_outputs, valset_subscores = self._val_evaluator()(new_program)
-        valset_score = sum(valset_subscores) / len(valset_subscores)
+        valset_score = sum(sum(d.values()) for d in valset_subscores) / len(valset_subscores)
 
         state.num_full_ds_evals += 1
         state.total_num_evals += len(valset_subscores)
@@ -95,7 +98,8 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
             valset_outputs=valset_outputs,
             valset_subscores=valset_subscores,
             run_dir=self.run_dir,
-            num_metric_calls_by_discovery_of_new_program=num_metric_calls_by_discovery
+            num_metric_calls_by_discovery_of_new_program=num_metric_calls_by_discovery,
+            pareto_frontier_type=self.pareto_frontier_type,
         )
         state.full_program_trace[-1]["new_program_idx"] = new_program_idx
 
@@ -128,6 +132,7 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
             logger=self.logger,
             seed_candidate=self.seed_candidate,
             valset_evaluator=self._val_evaluator(),
+            pareto_frontier_type=self.pareto_frontier_type,
             track_best_outputs=self.track_best_outputs,
         )
 

@@ -9,15 +9,23 @@ from gepa.core.adapter import RolloutOutput
 from gepa.gepa_utils import idxmax, json_default
 
 
+def _dominates(a: dict[str, float], b: dict[str, float]) -> bool:
+    """Return True if score vector ``a`` dominates ``b``."""
+    return all(a.get(k, 0.0) >= b.get(k, 0.0) for k in b) and any(
+        a.get(k, 0.0) > b.get(k, 0.0) for k in b
+    )
+
+
 class GEPAState(Generic[RolloutOutput]):
     program_candidates: list[dict[str, str]]
     parent_program_for_candidate: list[list[int | None]]
 
     program_full_scores_val_set: list[float]
+    program_full_subscores_val_set: list[dict[str, float]]
 
     program_at_pareto_front_valset: list[set[int]]
 
-    prog_candidate_val_subscores: list[list[float]]
+    prog_candidate_val_subscores: list[list[dict[str, float]]]
 
     list_of_named_predictors: list[str]
     named_predictor_id_to_update_next_for_program_candidate: list[int]
@@ -38,26 +46,46 @@ class GEPAState(Generic[RolloutOutput]):
     def __init__(
         self,
         seed_candidate: dict[str, str],
-        base_valset_eval_output: tuple[list[RolloutOutput], list[float]],
+        base_valset_eval_output: tuple[list[RolloutOutput], list[dict[str, float]]],
+        pareto_frontier_type: str,
         track_best_outputs: bool = False,
     ):
-        valset_base_score = sum(base_valset_eval_output[1]) / len(base_valset_eval_output[1])
-        base_valset_pareto_front = base_valset_eval_output[1]
+        base_subscores = base_valset_eval_output[1]
+        base_agg_scores = [sum(d.values()) for d in base_subscores]
+        valset_base_score = sum(base_agg_scores) / len(base_agg_scores)
+
+        agg_subscores: dict[str, float] = {}
+        for d in base_subscores:
+            for k, v in d.items():
+                agg_subscores[k] = agg_subscores.get(k, 0.0) + v
+        agg_subscores = {k: v / len(base_subscores) for k, v in agg_subscores.items()}
 
         self.program_candidates = [seed_candidate]
         self.program_full_scores_val_set = [valset_base_score]
+        self.program_full_subscores_val_set = [agg_subscores]
 
         self.per_program_tracked_scores = [valset_base_score]
 
-        self.pareto_front_valset = base_valset_pareto_front
+        self.pareto_front_valset = base_agg_scores
         self.parent_program_for_candidate = [[None]]
-        self.program_at_pareto_front_valset = [{0} for _ in range(len(base_valset_pareto_front))]
+
+        if pareto_frontier_type == "instance":
+            self.program_at_pareto_front_valset = [{0} for _ in range(len(base_subscores))]
+        elif pareto_frontier_type == "objective":
+            self.program_at_pareto_front_valset = [{0}]
+        elif pareto_frontier_type == "hybrid":
+            self.program_at_pareto_front_valset = [{0} for _ in range(len(base_subscores))]
+            self.program_at_pareto_front_valset.append({0})
+        else:
+            raise ValueError("Unknown pareto_frontier_type")
+
+        self.pareto_frontier_type = pareto_frontier_type
 
         self.list_of_named_predictors = list(seed_candidate.keys())
         self.named_predictor_id_to_update_next_for_program_candidate = [0]
         self.i = -1
 
-        self.prog_candidate_val_subscores = [base_valset_eval_output[1]]
+        self.prog_candidate_val_subscores = [base_subscores]
         self.num_metric_calls_by_discovery = [0]
 
         if track_best_outputs:
@@ -73,7 +101,12 @@ class GEPAState(Generic[RolloutOutput]):
         assert len(self.program_candidates) == len(self.named_predictor_id_to_update_next_for_program_candidate)
 
         assert len(self.prog_candidate_val_subscores) == len(self.program_candidates)
-        assert len(self.pareto_front_valset) == len(self.program_at_pareto_front_valset)
+        if self.pareto_frontier_type == "instance":
+            assert len(self.pareto_front_valset) == len(self.program_at_pareto_front_valset)
+        elif self.pareto_frontier_type == "objective":
+            assert len(self.program_at_pareto_front_valset) == 1
+        else:  # hybrid
+            assert len(self.program_at_pareto_front_valset) == len(self.pareto_front_valset) + 1
         assert len(self.program_candidates) == len(self.num_metric_calls_by_discovery)
 
         for prog_list in self.program_at_pareto_front_valset:
@@ -99,7 +132,12 @@ class GEPAState(Generic[RolloutOutput]):
         state.__dict__.update(d)
 
         assert len(state.program_candidates) == len(state.program_full_scores_val_set)
-        assert len(state.pareto_front_valset) == len(state.program_at_pareto_front_valset)
+        if state.pareto_frontier_type == "instance":
+            assert len(state.pareto_front_valset) == len(state.program_at_pareto_front_valset)
+        elif state.pareto_frontier_type == "objective":
+            assert len(state.program_at_pareto_front_valset) == 1
+        else:
+            assert len(state.program_at_pareto_front_valset) == len(state.pareto_front_valset) + 1
 
         assert len(state.program_candidates) == len(state.parent_program_for_candidate)
         assert len(state.program_candidates) == len(state.named_predictor_id_to_update_next_for_program_candidate)
@@ -112,9 +150,10 @@ class GEPAState(Generic[RolloutOutput]):
         new_program: dict[str, str],
         valset_score: float,
         valset_outputs: Any,
-        valset_subscores: list[float],
+        valset_subscores: list[dict[str, float]],
         run_dir: str | None,
-        num_metric_calls_by_discovery_of_new_program: int
+        num_metric_calls_by_discovery_of_new_program: int,
+        pareto_frontier_type: str,
     ):
         new_program_idx = len(self.program_candidates)
         self.program_candidates.append(new_program)
@@ -126,24 +165,81 @@ class GEPAState(Generic[RolloutOutput]):
 
         self.prog_candidate_val_subscores.append(valset_subscores)
         self.program_full_scores_val_set.append(valset_score)
-        for task_idx, (old_score, new_score) in enumerate(zip(self.pareto_front_valset, valset_subscores, strict=False)):
-            if new_score > old_score:
-                self.pareto_front_valset[task_idx] = new_score
-                self.program_at_pareto_front_valset[task_idx] = {new_program_idx}
 
-                if self.best_outputs_valset is not None:
-                    self.best_outputs_valset[task_idx] = [(new_program_idx, valset_outputs[task_idx])]
+        agg_subscores: dict[str, float] = {}
+        for d in valset_subscores:
+            for k, v in d.items():
+                agg_subscores[k] = agg_subscores.get(k, 0.0) + v
+        agg_subscores = {k: v / len(valset_subscores) for k, v in agg_subscores.items()}
+        self.program_full_subscores_val_set.append(agg_subscores)
 
-                if run_dir is not None:
-                    os.makedirs(os.path.join(run_dir, "generated_best_outputs_valset", f"task_{task_idx}"), exist_ok=True)
-                    with open(os.path.join(run_dir, "generated_best_outputs_valset", f"task_{task_idx}", f"iter_{self.i+1}_prog_{new_program_idx}.json"), "w") as f:
-                        json.dump(valset_outputs[task_idx], f, indent=4, default=json_default)
-            elif new_score == old_score:
-                self.program_at_pareto_front_valset[task_idx].add(new_program_idx)
-                if self.best_outputs_valset is not None:
-                    self.best_outputs_valset[task_idx].append((new_program_idx, valset_outputs[task_idx]))
+        if pareto_frontier_type in ("instance", "hybrid"):
+            for task_idx, (old_score, new_dict) in enumerate(
+                zip(self.pareto_front_valset, valset_subscores, strict=False)
+            ):
+                new_scalar = sum(new_dict.values())
+                if new_scalar > old_score:
+                    self.pareto_front_valset[task_idx] = new_scalar
+                    self.program_at_pareto_front_valset[task_idx] = {new_program_idx}
 
-        assert len(valset_subscores) == len(self.program_at_pareto_front_valset)
+                    if self.best_outputs_valset is not None:
+                        self.best_outputs_valset[task_idx] = [(new_program_idx, valset_outputs[task_idx])]
+
+                    if run_dir is not None:
+                        os.makedirs(
+                            os.path.join(run_dir, "generated_best_outputs_valset", f"task_{task_idx}"),
+                            exist_ok=True,
+                        )
+                        with open(
+                            os.path.join(
+                                run_dir,
+                                "generated_best_outputs_valset",
+                                f"task_{task_idx}",
+                                f"iter_{self.i+1}_prog_{new_program_idx}.json",
+                            ),
+                            "w",
+                        ) as f:
+                            json.dump(valset_outputs[task_idx], f, indent=4, default=json_default)
+                elif new_scalar == old_score:
+                    self.program_at_pareto_front_valset[task_idx].add(new_program_idx)
+                    if self.best_outputs_valset is not None:
+                        self.best_outputs_valset[task_idx].append(
+                            (new_program_idx, valset_outputs[task_idx])
+                        )
+                else:
+                    front = self.program_at_pareto_front_valset[task_idx]
+                    to_remove = set()
+                    dominated = False
+                    for prog in list(front):
+                        existing = self.prog_candidate_val_subscores[prog][task_idx]
+                        if _dominates(existing, new_dict):
+                            dominated = True
+                            break
+                        if _dominates(new_dict, existing):
+                            to_remove.add(prog)
+                    if not dominated:
+                        front.add(new_program_idx)
+                        for r in to_remove:
+                            front.discard(r)
+
+        if pareto_frontier_type in ("objective", "hybrid"):
+            idx = 0 if pareto_frontier_type == "objective" else len(self.pareto_front_valset)
+            front = self.program_at_pareto_front_valset[idx]
+            to_remove = set()
+            dominated = False
+            for prog in list(front):
+                existing = self.program_full_subscores_val_set[prog]
+                if _dominates(existing, agg_subscores):
+                    dominated = True
+                    break
+                if _dominates(agg_subscores, existing):
+                    to_remove.add(prog)
+            if not dominated:
+                front.add(new_program_idx)
+                for r in to_remove:
+                    front.discard(r)
+
+        assert len(valset_subscores) == len(self.prog_candidate_val_subscores[0])
 
         self.per_program_tracked_scores = self.program_full_scores_val_set
 
@@ -152,19 +248,23 @@ class GEPAState(Generic[RolloutOutput]):
         return new_program_idx, linear_pareto_front_program_idx
 
 def write_eval_output_to_directory(
-    eval_out: tuple[list[RolloutOutput], list[float]],
+    eval_out: tuple[list[RolloutOutput], list[dict[str, float]]],
     output_dir: str
 ):
-    for task_idx, score in enumerate(eval_out[1]):
+    for task_idx, _ in enumerate(eval_out[1]):
         os.makedirs(os.path.join(output_dir, f"task_{task_idx}"), exist_ok=True)
-        with open(os.path.join(output_dir, f"task_{task_idx}", f"iter_{0}_prog_0.json"), "w") as f:
+        with open(
+            os.path.join(output_dir, f"task_{task_idx}", f"iter_{0}_prog_0.json"),
+            "w",
+        ) as f:
             json.dump(eval_out[1][task_idx], f, indent=4, default=json_default)
 
 def initialize_gepa_state(
     run_dir: str | None,
     logger,
     seed_candidate: dict[str, str],
-    valset_evaluator: Callable[[dict[str, str]], tuple[list[RolloutOutput], list[float]]],
+    valset_evaluator: Callable[[dict[str, str]], tuple[list[RolloutOutput], list[dict[str, float]]]],
+    pareto_frontier_type: str,
     track_best_outputs: bool = False,
 ):
     if run_dir is not None and os.path.exists(os.path.join(run_dir, "gepa_state.bin")) and os.path.exists(os.path.join(run_dir, "prog_candidates")):
@@ -181,6 +281,7 @@ def initialize_gepa_state(
         gepa_state = GEPAState(
             seed_candidate,
             valset_out,
+            pareto_frontier_type=pareto_frontier_type,
             track_best_outputs=track_best_outputs,
         )
 

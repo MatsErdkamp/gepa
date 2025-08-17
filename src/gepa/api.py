@@ -27,6 +27,7 @@ def optimize(
     # Reflection-based configuration
     reflection_lm: LanguageModel | str | None = None,
     candidate_selection_strategy: str = "pareto",
+    pareto_frontier_type: str = "instance",
     skip_perfect_score=True,
     reflection_minibatch_size=3,
     perfect_score=1,
@@ -161,7 +162,10 @@ def optimize(
     if use_merge:
         def evaluator(inputs, prog):
             eval_out = adapter.evaluate(inputs, prog, capture_traces=False)
-            return eval_out.outputs, eval_out.scores
+            subs = eval_out.subscores if eval_out.subscores is not None else [
+                {"score": s} for s in eval_out.scores
+            ]
+            return eval_out.outputs, subs
 
         merge_proposer = MergeProposer(
             logger=logger,
@@ -174,7 +178,10 @@ def optimize(
 
     def full_eval(inputs, prog):
         eval_out = adapter.evaluate(inputs, prog, capture_traces=False)
-        return eval_out.outputs, eval_out.scores
+        subs = eval_out.subscores if eval_out.subscores is not None else [
+            {"score": s} for s in eval_out.scores
+        ]
+        return eval_out.outputs, subs
 
     engine = GEPAEngine(
         run_dir=run_dir,
@@ -192,6 +199,7 @@ def optimize(
         wandb_api_key=wandb_api_key,
         wandb_init_kwargs=wandb_init_kwargs,
         track_best_outputs=track_best_outputs,
+        pareto_frontier_type=pareto_frontier_type,
     )
     state = engine.run()
     result = GEPAResult.from_state(state)

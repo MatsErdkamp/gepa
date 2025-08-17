@@ -16,14 +16,19 @@ class EvaluationBatch(Generic[Trajectory, RolloutOutput]):
 
     - outputs: raw per-example outputs from upon executing the candidate. GEPA does not interpret these;
       they are forwarded to other parts of the user's code or logging as-is.
-    - scores: per-example numeric scores (floats). GEPA sums these for minibatch acceptance
-      and averages them over the full validation set for tracking/pareto fronts.
-    - trajectories: optional per-example traces used by make_reflective_dataset to build
-      a reflective dataset (See `GEPAAdapter.make_reflective_dataset`). If capture_traces=True is passed to `evaluate`, trajectories
-      should be provided and align one-to-one with `outputs` and `scores`.
+    - scores: per-example numeric scores (floats). GEPA sums these for minibatch
+      acceptance and averages them over the full validation set for tracking/pareto
+      fronts.
+    - subscores: optional per-example dictionaries capturing scores for multiple
+      objectives. When provided, GEPA can perform objective-level Pareto selection.
+    - trajectories: optional per-example traces used by make_reflective_dataset to
+      build a reflective dataset (See `GEPAAdapter.make_reflective_dataset`). If
+      capture_traces=True is passed to `evaluate`, trajectories should be provided
+      and align one-to-one with `outputs` and `scores`.
     """
     outputs: list[RolloutOutput]
     scores: list[float]
+    subscores: list[dict[str, float]] | None = None
     trajectories: list[Trajectory] | None = None
 
 class ProposalFn(Protocol):

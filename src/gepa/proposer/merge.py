@@ -169,7 +169,7 @@ class MergeProposer(ProposeNewCandidate):
         self,
         logger: Any,
         valset: list[DataInst],
-        evaluator: Callable[[list[DataInst], dict[str, str]], tuple[list[RolloutOutput], list[float]]],
+        evaluator: Callable[[list[DataInst], dict[str, str]], tuple[list[RolloutOutput], list[dict[str, float]]]],
         use_merge: bool,
         max_merge_invocations: int,
         rng: random.Random | None = None,
@@ -198,13 +198,15 @@ class MergeProposer(ProposeNewCandidate):
 
     def select_eval_subsample_for_merged_program(
         self,
-        scores1: list[float],
-        scores2: list[float],
+        scores1: list[dict[str, float]],
+        scores2: list[dict[str, float]],
         num_subsample_ids: int = 5,
     ) -> list[int]:
         all_indices = set(range(len(scores1)))
-        p1 = [i for i, (s1, s2) in enumerate(zip(scores1, scores2, strict=False)) if s1 > s2]
-        p2 = [i for i, (s1, s2) in enumerate(zip(scores1, scores2, strict=False)) if s2 > s1]
+        agg1 = [sum(s.values()) for s in scores1]
+        agg2 = [sum(s.values()) for s in scores2]
+        p1 = [i for i, (s1, s2) in enumerate(zip(agg1, agg2, strict=False)) if s1 > s2]
+        p2 = [i for i, (s1, s2) in enumerate(zip(agg1, agg2, strict=False)) if s2 > s1]
         p3 = [i for i in all_indices if i not in p1 and i not in p2]
 
         n_each = math.ceil(num_subsample_ids / 3)
@@ -265,11 +267,15 @@ class MergeProposer(ProposeNewCandidate):
         id2_sub_scores = [state.prog_candidate_val_subscores[id2][k] for k in subsample_ids]
         state.full_program_trace[-1]["subsample_ids"] = subsample_ids
 
-        _, new_sub_scores = self.evaluator(mini_devset, new_program)
+        _, new_sub_scores_dict = self.evaluator(mini_devset, new_program)
+        new_sub_scores = [sum(d.values()) for d in new_sub_scores_dict]
+
+        id1_sub_scores_scalar = [sum(d.values()) for d in id1_sub_scores]
+        id2_sub_scores_scalar = [sum(d.values()) for d in id2_sub_scores]
 
         state.full_program_trace[-1]["id1_subsample_scores"] = id1_sub_scores
         state.full_program_trace[-1]["id2_subsample_scores"] = id2_sub_scores
-        state.full_program_trace[-1]["new_program_subsample_scores"] = new_sub_scores
+        state.full_program_trace[-1]["new_program_subsample_scores"] = new_sub_scores_dict
 
         # Count evals
         state.total_num_evals += len(subsample_ids)
@@ -279,7 +285,7 @@ class MergeProposer(ProposeNewCandidate):
             candidate=new_program,
             parent_program_ids=[id1, id2],
             subsample_indices=subsample_ids,
-            subsample_scores_before=[sum(id1_sub_scores), sum(id2_sub_scores)],  # packed as [parent1_sum, parent2_sum]
+            subsample_scores_before=[sum(id1_sub_scores_scalar), sum(id2_sub_scores_scalar)],  # packed as [parent1_sum, parent2_sum]
             subsample_scores_after=new_sub_scores,
             tag="merge",
             metadata={"ancestor": ancestor}
