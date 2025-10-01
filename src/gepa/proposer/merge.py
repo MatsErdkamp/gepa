@@ -265,7 +265,7 @@ class MergeProposer(ProposeNewCandidate):
         id2_sub_scores = [state.prog_candidate_val_subscores[id2][k] for k in subsample_ids]
         state.full_program_trace[-1]["subsample_ids"] = subsample_ids
 
-        _, new_sub_scores = self.evaluator(mini_devset, new_program)
+        _, new_sub_scores, _ = self.evaluator(mini_devset, new_program)
 
         state.full_program_trace[-1]["id1_subsample_scores"] = id1_sub_scores
         state.full_program_trace[-1]["id2_subsample_scores"] = id2_sub_scores

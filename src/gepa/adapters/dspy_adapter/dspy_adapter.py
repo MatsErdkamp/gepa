@@ -82,6 +82,29 @@ class DspyAdapter(GEPAAdapter[Example, TraceData, Prediction]):
                 pred.signature = pred.signature.with_instructions(candidate[name])
         return new_prog
 
+    def _parse_score(self, raw_score: Any) -> tuple[float, Any]:
+        if raw_score is None:
+            return self.failure_score, None
+
+        objective_subscores = None
+        score_value: Any = raw_score
+
+        if isinstance(raw_score, dict):
+            objective_subscores = raw_score.get("subscores")
+            score_value = raw_score.get("score", raw_score)
+        else:
+            if hasattr(raw_score, "subscores"):
+                objective_subscores = getattr(raw_score, "subscores")
+            if hasattr(raw_score, "score"):
+                score_value = getattr(raw_score, "score")
+
+        try:
+            score_float = float(score_value)
+        except (TypeError, ValueError):
+            score_float = self.failure_score
+
+        return score_float, objective_subscores
+
     def evaluate(self, batch, candidate, capture_traces=False):
         program = self.build_program(candidate)
 
@@ -100,16 +123,27 @@ class DspyAdapter(GEPAAdapter[Example, TraceData, Prediction]):
             )
             scores = []
             outputs = []
+            subscores: list[Any] = []
             for t in trajs:
                 outputs.append(t["prediction"])
-                if hasattr(t["prediction"], "__class__") and t.get("score") is None:
-                    scores.append(self.failure_score)
+                raw_score = t.get("score")
+                if hasattr(t["prediction"], "__class__") and raw_score is None:
+                    score_value = self.failure_score
+                    objective_details = None
                 else:
-                    score = t["score"]
-                    if hasattr(score, "score"):
-                        score = score["score"]
-                    scores.append(score)
-            return EvaluationBatch(outputs=outputs, scores=scores, trajectories=trajs)
+                    score_value, objective_details = self._parse_score(raw_score)
+                scores.append(score_value)
+                subscores.append(objective_details)
+
+            normalized_subscores = (
+                subscores if any(s is not None for s in subscores) else None
+            )
+            return EvaluationBatch(
+                outputs=outputs,
+                scores=scores,
+                subscores=normalized_subscores,
+                trajectories=trajs,
+            )
         else:
             evaluator = Evaluate(
                 devset=batch,
@@ -123,9 +157,23 @@ class DspyAdapter(GEPAAdapter[Example, TraceData, Prediction]):
             )
             res = evaluator(program)
             outputs = [r[1] for r in res.results]
-            scores = [r[2] for r in res.results]
-            scores = [s["score"] if hasattr(s, "score") else s for s in scores]
-            return EvaluationBatch(outputs=outputs, scores=scores, trajectories=None)
+            raw_scores = [r[2] for r in res.results]
+            scores: list[float] = []
+            subscores: list[Any] = []
+            for raw_score in raw_scores:
+                score_value, objective_details = self._parse_score(raw_score)
+                scores.append(score_value)
+                subscores.append(objective_details)
+
+            normalized_subscores = (
+                subscores if any(s is not None for s in subscores) else None
+            )
+            return EvaluationBatch(
+                outputs=outputs,
+                scores=scores,
+                subscores=normalized_subscores,
+                trajectories=None,
+            )
 
     def make_reflective_dataset(self, candidate, eval_batch, components_to_update):
         from dspy.teleprompt.bootstrap_trace import FailedPrediction

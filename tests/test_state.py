@@ -34,6 +34,8 @@ def test_initialize_gepa_state_fresh_init_writes_and_counts(run_dir):
     assert isinstance(result, state_mod.GEPAState)
     assert result.num_full_ds_evals == 1
     assert result.total_num_evals == len(valset_out[1])
+    assert result.frontier_type == "instance"
+    assert result.frontier_dimension_labels == ["instance:0", "instance:1"]
     fake_logger.log.assert_not_called()
     valset_evaluator.assert_called_once_with(seed)
 
@@ -75,7 +77,18 @@ def test_gepa_state_save_and_initialize(run_dir):
     fake_logger = MagicMock()
     valset_evaluator = MagicMock(return_value=valset_out)
 
-    state = state_mod.GEPAState(seed, valset_out)
+    frontier_labels, frontier_scores = state_mod.compute_frontier_dimensions(
+        "instance", valset_out[1], {}
+    )
+    state = state_mod.GEPAState(
+        seed,
+        valset_out[0],
+        valset_out[1],
+        frontier_type="instance",
+        frontier_dimension_labels=frontier_labels,
+        base_frontier_scores=frontier_scores,
+        objective_scores={},
+    )
     state.num_full_ds_evals = 3
     state.total_num_evals = 10
     assert state.is_consistent()
@@ -90,6 +103,80 @@ def test_gepa_state_save_and_initialize(run_dir):
     )
 
     assert state.__dict__ == result.__dict__
+
+
+def test_initialize_gepa_state_objective_frontier():
+    seed = {"model": "m"}
+    outputs = ["a", "b"]
+    instance_scores = [0.4, 0.6]
+    objective_breakdown = [
+        {"accuracy": 0.8, "f1": 0.5},
+        {"accuracy": 1.0, "f1": 0.7},
+    ]
+    fake_logger = MagicMock()
+    valset_evaluator = MagicMock(return_value=(outputs, instance_scores, objective_breakdown))
+
+    state = state_mod.initialize_gepa_state(
+        run_dir=None,
+        logger=fake_logger,
+        seed_candidate=seed,
+        valset_evaluator=valset_evaluator,
+        track_best_outputs=False,
+        frontier_type="objective",
+    )
+
+    assert state.frontier_type == "objective"
+    assert state.frontier_dimension_labels == ["objective:accuracy", "objective:f1"]
+    assert state.pareto_front_valset == pytest.approx([0.9, 0.6])
+    assert state.program_objective_scores[0] == pytest.approx({"accuracy": 0.9, "f1": 0.6})
+    assert state.prog_candidate_val_subscores[0] == instance_scores
+
+
+def test_initialize_gepa_state_hybrid_frontier():
+    seed = {"model": "m"}
+    outputs = ["a", "b"]
+    instance_scores = [0.2, 0.9]
+    objective_breakdown = [
+        {"accuracy": 0.1, "f1": 0.3},
+        {"accuracy": 0.9, "f1": 0.8},
+    ]
+    fake_logger = MagicMock()
+    valset_evaluator = MagicMock(return_value=(outputs, instance_scores, objective_breakdown))
+
+    state = state_mod.initialize_gepa_state(
+        run_dir=None,
+        logger=fake_logger,
+        seed_candidate=seed,
+        valset_evaluator=valset_evaluator,
+        track_best_outputs=False,
+        frontier_type="hybrid",
+    )
+
+    assert state.frontier_type == "hybrid"
+    assert state.frontier_dimension_labels == [
+        "objective:accuracy",
+        "objective:f1",
+        "instance:0",
+        "instance:1",
+    ]
+    assert state.pareto_front_valset[:2] == pytest.approx([0.5, 0.55])
+    assert state.pareto_front_valset[2:] == pytest.approx(instance_scores)
+
+
+def test_initialize_gepa_state_objective_requires_subscores():
+    seed = {"model": "m"}
+    fake_logger = MagicMock()
+    valset_evaluator = MagicMock(return_value=([], [], None))
+
+    with pytest.raises(ValueError):
+        state_mod.initialize_gepa_state(
+            run_dir=None,
+            logger=fake_logger,
+            seed_candidate=seed,
+            valset_evaluator=valset_evaluator,
+            track_best_outputs=False,
+            frontier_type="objective",
+        )
 
 
 @pytest.fixture(scope="module")
