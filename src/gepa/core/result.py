@@ -16,7 +16,8 @@ class GEPAResult(Generic[RolloutOutput]):
     - parents: lineage info; for each candidate i, parents[i] is a list of parent indices or None
     - val_aggregate_scores: per-candidate aggregate score on the validation set (higher is better)
     - val_subscores: per-candidate per-instance scores on the validation set (len == num_val_instances)
-    - per_val_instance_best_candidates: for each val instance t, a set of candidate indices achieving the current best score on t
+    - per_val_instance_best_candidates: for each tracked frontier dimension (validation instance or objective), a set of
+      candidate indices achieving the current best score on that dimension
     - discovery_eval_counts: number of metric calls accumulated up to the discovery of each candidate
 
     Optional fields:
@@ -46,6 +47,10 @@ class GEPAResult(Generic[RolloutOutput]):
     val_subscores: list[list[float]]
     per_val_instance_best_candidates: list[set[int]]
     discovery_eval_counts: list[int]
+
+    frontier_type: str = "instance"
+    frontier_dimension_labels: list[str] | None = None
+    objective_scores: list[dict[str, float]] | None = None
 
     # Optional data
     best_outputs_valset: list[list[tuple[int, list[RolloutOutput]]]] | None = None
@@ -85,6 +90,9 @@ class GEPAResult(Generic[RolloutOutput]):
             parents=self.parents,
             val_aggregate_scores=self.val_aggregate_scores,
             val_subscores=self.val_subscores,
+            frontier_type=self.frontier_type,
+            frontier_dimension_labels=self.frontier_dimension_labels,
+            objective_scores=self.objective_scores,
             best_outputs_valset=self.best_outputs_valset,
             per_val_instance_best_candidates=[list(s) for s in self.per_val_instance_best_candidates],
             discovery_eval_counts=self.discovery_eval_counts,
@@ -108,6 +116,20 @@ class GEPAResult(Generic[RolloutOutput]):
             val_subscores=[list(s) for s in state.prog_candidate_val_subscores],
             per_val_instance_best_candidates=[set(s) for s in state.program_at_pareto_front_valset],
             discovery_eval_counts=list(state.num_metric_calls_by_discovery),
+            frontier_type=getattr(state, "frontier_type", "instance"),
+            frontier_dimension_labels=list(getattr(
+                state,
+                "frontier_dimension_labels",
+                [f"instance:{idx}" for idx in range(len(state.program_at_pareto_front_valset))],
+            )),
+            objective_scores=[
+                dict(scores)
+                for scores in getattr(
+                    state,
+                    "program_objective_scores",
+                    [{} for _ in state.program_candidates],
+                )
+            ],
             total_metric_calls=getattr(state, "total_num_evals", None),
             num_full_val_evals=getattr(state, "num_full_ds_evals", None),
             run_dir=run_dir,

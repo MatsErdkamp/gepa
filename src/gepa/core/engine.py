@@ -4,7 +4,13 @@
 import traceback
 from typing import Any, Callable, Generic
 
-from gepa.core.state import GEPAState, initialize_gepa_state
+from gepa.core.state import (
+    GEPAState,
+    aggregate_objective_scores,
+    compute_frontier_dimensions,
+    initialize_gepa_state,
+    unpack_evaluation_output,
+)
 from gepa.logging.utils import log_detailed_metrics_after_discovering_new_program
 from gepa.proposer.merge import MergeProposer
 from gepa.proposer.reflective_mutation.reflective_mutation import ReflectiveMutationProposer
@@ -26,7 +32,7 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
     def __init__(
         self,
         run_dir: str | None,
-        evaluator: Callable[[list[DataInst], dict[str, str]], tuple[list[RolloutOutput], list[float]]],
+        evaluator: Callable[[list[DataInst], dict[str, str]], tuple[Any, ...]],
         valset: list[DataInst] | None,
         seed_candidate: dict[str, str],
         # Controls
@@ -42,6 +48,7 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
         track_best_outputs: bool = False,
         display_progress_bar: bool = False,
         raise_on_exception: bool = True,
+        frontier_type: str = "instance",
         # Budget and Stop Condition
         stop_callback: Callable[[Any], bool] | None = None,
     ):
@@ -73,7 +80,9 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
 
         self.raise_on_exception = raise_on_exception
 
-    def _val_evaluator(self) -> Callable[[dict[str, str]], tuple[list[RolloutOutput], list[float]]]:
+        self.frontier_type = frontier_type
+
+    def _val_evaluator(self) -> Callable[[dict[str, str]], tuple[Any, ...]]:
         assert self.valset is not None
         return lambda prog: self.evaluator(self.valset, prog)
 
@@ -88,18 +97,32 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
     ) -> tuple[int, int]:
         num_metric_calls_by_discovery = state.total_num_evals
 
-        valset_outputs, valset_subscores = self._val_evaluator()(new_program)
-        valset_score = sum(valset_subscores) / len(valset_subscores)
+        eval_outputs = self._val_evaluator()(new_program)
+        valset_outputs, instance_scores, objective_breakdown = unpack_evaluation_output(
+            eval_outputs
+        )
+        valset_score = (
+            sum(instance_scores) / len(instance_scores) if instance_scores else 0.0
+        )
+        objective_scores = aggregate_objective_scores(objective_breakdown)
+        frontier_labels, frontier_scores = compute_frontier_dimensions(
+            self.frontier_type,
+            instance_scores,
+            objective_scores,
+        )
 
         state.num_full_ds_evals += 1
-        state.total_num_evals += len(valset_subscores)
+        state.total_num_evals += len(instance_scores)
 
         new_program_idx, linear_pareto_front_program_idx = state.update_state_with_new_program(
             parent_program_idx=parent_program_idx,
             new_program=new_program,
             valset_score=valset_score,
             valset_outputs=valset_outputs,
-            valset_subscores=valset_subscores,
+            instance_scores=instance_scores,
+            frontier_scores=frontier_scores,
+            frontier_dimension_labels=frontier_labels,
+            objective_scores=objective_scores,
             run_dir=self.run_dir,
             num_metric_calls_by_discovery_of_new_program=num_metric_calls_by_discovery,
         )
@@ -113,7 +136,9 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
             gepa_state=state,
             valset_score=valset_score,
             new_program_idx=new_program_idx,
-            valset_subscores=valset_subscores,
+            instance_scores=instance_scores,
+            frontier_dimension_labels=frontier_labels,
+            frontier_scores=frontier_scores,
             experiment_tracker=self.experiment_tracker,
             linear_pareto_front_program_idx=linear_pareto_front_program_idx,
         )
@@ -156,9 +181,10 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
             seed_candidate=self.seed_candidate,
             valset_evaluator=self._val_evaluator(),
             track_best_outputs=self.track_best_outputs,
+            frontier_type=self.frontier_type,
         )
 
-        assert len(state.pareto_front_valset) == len(self.valset)
+        assert state.num_val_instances == len(self.valset)
 
         # Log base program score
         self.experiment_tracker.log_metrics(

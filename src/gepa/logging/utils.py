@@ -11,7 +11,9 @@ def log_detailed_metrics_after_discovering_new_program(
     gepa_state: GEPAState,
     valset_score,
     new_program_idx,
-    valset_subscores,
+    instance_scores,
+    frontier_dimension_labels,
+    frontier_scores,
     experiment_tracker,
     linear_pareto_front_program_idx,
 ):
@@ -22,10 +24,30 @@ def log_detailed_metrics_after_discovering_new_program(
     logger.log(
         f"Iteration {gepa_state.i + 1}: Full train_val score for new program: {gepa_state.per_program_tracked_scores[new_program_idx]}"
     )
-    logger.log(f"Iteration {gepa_state.i + 1}: Individual valset scores for new program: {valset_subscores}")
-    logger.log(f"Iteration {gepa_state.i + 1}: New valset pareto front scores: {gepa_state.pareto_front_valset}")
     logger.log(
-        f"Iteration {gepa_state.i + 1}: Full valset pareto front score: {sum(gepa_state.pareto_front_valset) / len(gepa_state.pareto_front_valset)}"
+        f"Iteration {gepa_state.i + 1}: Individual valset scores for new program: {instance_scores}"
+    )
+    new_program_frontier = dict(zip(frontier_dimension_labels, frontier_scores, strict=False))
+    state_frontier = dict(
+        zip(gepa_state.frontier_dimension_labels, gepa_state.pareto_front_valset, strict=False)
+    )
+    logger.log(
+        f"Iteration {gepa_state.i + 1}: Frontier scores for new program: {new_program_frontier}"
+    )
+    logger.log(
+        f"Iteration {gepa_state.i + 1}: Updated frontier scores: {state_frontier}"
+    )
+    if gepa_state.program_objective_scores[new_program_idx]:
+        logger.log(
+            "Iteration {}: Objective scores for new program: {}".format(
+                gepa_state.i + 1,
+                gepa_state.program_objective_scores[new_program_idx],
+            )
+        )
+    frontier_avg = (
+        sum(gepa_state.pareto_front_valset) / len(gepa_state.pareto_front_valset)
+        if gepa_state.pareto_front_valset
+        else 0.0
     )
     logger.log(
         f"Iteration {gepa_state.i + 1}: Updated valset pareto front programs: {gepa_state.program_at_pareto_front_valset}"
@@ -53,9 +75,12 @@ def log_detailed_metrics_after_discovering_new_program(
         # "full_valset_score": valset_score,
         # "full_train_val_score": gepa_state.per_program_tracked_scores[new_program_idx],
         "new_program_idx": new_program_idx,
-        "valset_pareto_front_scores": gepa_state.pareto_front_valset,
-        "individual_valset_score_new_program": valset_subscores,
-        "valset_pareto_front_agg": sum(gepa_state.pareto_front_valset) / len(gepa_state.pareto_front_valset),
+        "valset_pareto_front_scores": state_frontier,
+        "individual_valset_score_new_program": instance_scores,
+        "frontier_scores_new_program": new_program_frontier,
+        "frontier_dimension_labels": list(frontier_dimension_labels),
+        "objective_scores_new_program": gepa_state.program_objective_scores[new_program_idx],
+        "valset_pareto_front_agg": frontier_avg,
         "valset_pareto_front_programs": gepa_state.program_at_pareto_front_valset,
         "best_valset_agg_score": max(gepa_state.program_full_scores_val_set),
         "linear_pareto_front_program_idx": linear_pareto_front_program_idx,
