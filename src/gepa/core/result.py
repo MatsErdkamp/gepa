@@ -1,6 +1,7 @@
 # Copyright (c) 2025 Lakshya A Agrawal and the GEPA contributors
 # https://github.com/gepa-ai/gepa
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Generic
 
@@ -94,7 +95,9 @@ class GEPAResult(Generic[RolloutOutput]):
             frontier_dimension_labels=self.frontier_dimension_labels,
             objective_scores=self.objective_scores,
             frontier_scores=self.frontier_scores,
-            frontier_programs={k: list(v) for k, v in self.frontier_programs.items()} if self.frontier_programs else None,
+            frontier_programs={k: list(v) for k, v in self.frontier_programs.items()}
+            if self.frontier_programs
+            else None,
             best_outputs_valset=self.best_outputs_valset,
             per_val_instance_best_candidates={k: list(v) for k, v in self.per_val_instance_best_candidates.items()},
             discovery_eval_counts=self.discovery_eval_counts,
@@ -136,10 +139,16 @@ class GEPAResult(Generic[RolloutOutput]):
                     [{} for _ in state.program_candidates],
                 )
             ],
-            frontier_scores=dict(getattr(state, "frontier_scores", {})),
-            frontier_programs={
-                label: set(progs) for label, progs in getattr(state, "frontier_programs", {}).items()
-            },
+            frontier_scores=(
+                dict(frontier_scores_attr)
+                if isinstance(frontier_scores_attr := getattr(state, "frontier_scores", None), Mapping)
+                else None
+            ),
+            frontier_programs=(
+                {label: set(progs) for label, progs in frontier_programs_attr.items()}
+                if isinstance(frontier_programs_attr := getattr(state, "frontier_programs", None), Mapping)
+                else None
+            ),
             total_metric_calls=getattr(state, "total_num_evals", None),
             num_full_val_evals=getattr(state, "num_full_ds_evals", None),
             run_dir=run_dir,
