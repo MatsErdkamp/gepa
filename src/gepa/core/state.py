@@ -245,7 +245,8 @@ class GEPAState(Generic[RolloutOutput, ValId]):
             label: set(progs) for label, progs in getattr(state, "frontier_programs", {}).items()
         }
         state.program_objective_scores = [
-            dict(scores) for scores in getattr(state, "program_objective_scores", [{} for _ in state.program_candidates])
+            dict(scores)
+            for scores in getattr(state, "program_objective_scores", [{} for _ in state.program_candidates])
         ]
         state.num_val_instances = getattr(state, "num_val_instances", len(state.pareto_front_valset))
 
@@ -269,9 +270,7 @@ class GEPAState(Generic[RolloutOutput, ValId]):
 
         program_at_front = d.get("program_at_pareto_front_valset")
         if program_at_front and isinstance(program_at_front, list):
-            d["program_at_pareto_front_valset"] = {
-                idx: set(front) for idx, front in enumerate(program_at_front)
-            }
+            d["program_at_pareto_front_valset"] = {idx: set(front) for idx, front in enumerate(program_at_front)}
 
         if "frontier_dimension_labels" not in d:
             d["frontier_dimension_labels"] = [f"instance:{idx}" for idx in d["pareto_front_valset"].keys()]
@@ -282,7 +281,10 @@ class GEPAState(Generic[RolloutOutput, ValId]):
             }
         if "frontier_programs" not in d:
             d["frontier_programs"] = {
-                label: set(front) for label, front in zip(d["frontier_dimension_labels"], d["program_at_pareto_front_valset"].values(), strict=False)
+                label: set(front)
+                for label, front in zip(
+                    d["frontier_dimension_labels"], d["program_at_pareto_front_valset"].values(), strict=False
+                )
             }
         if "program_objective_scores" not in d:
             d["program_objective_scores"] = [{} for _ in d["prog_candidate_val_subscores"]]
@@ -300,12 +302,24 @@ class GEPAState(Generic[RolloutOutput, ValId]):
 
     @property
     def program_full_scores_val_set(self) -> list[float]:
-        return [self.get_program_average(program_idx)[0] for program_idx in range(len(self.prog_candidate_val_subscores))]
+        return [
+            self.get_program_average(program_idx)[0] for program_idx in range(len(self.prog_candidate_val_subscores))
+        ]
 
     @property
     def per_program_tracked_scores(self) -> list[float]:
         # NOTE(aria42): This same as valset program average scores, but this was already the case
-        return [self.get_program_average(program_idx)[0] for program_idx in range(len(self.prog_candidate_val_subscores))]
+        return [
+            self.get_program_average(program_idx)[0] for program_idx in range(len(self.prog_candidate_val_subscores))
+        ]
+
+    @property
+    def valset_evaluations(self) -> dict[ValId, list[ProgramIdx]]:
+        result: dict[ValId, list[ProgramIdx]] = defaultdict(list)
+        for program_idx, val_scores in enumerate(self.prog_candidate_val_subscores):
+            for val_id in val_scores.keys():
+                result[val_id].append(program_idx)
+        return result
 
     def _update_pareto_front_for_val_id(
         self,
@@ -435,7 +449,19 @@ def initialize_gepa_state(
     else:
         num_evals_run = 0
 
-        seed_val_outputs, seed_val_scores, seed_subscores = valset_evaluator(seed_candidate)
+        valset_eval = valset_evaluator(seed_candidate)
+        if not isinstance(valset_eval, (tuple, list)):
+            raise TypeError("valset_evaluator must return a tuple or list")
+        if len(valset_eval) == 2:
+            seed_val_outputs, seed_val_scores = valset_eval
+            seed_subscores = None
+        elif len(valset_eval) == 3:
+            seed_val_outputs, seed_val_scores, seed_subscores = valset_eval
+        else:
+            raise ValueError("valset_evaluator must return 2 or 3 values")
+
+        seed_val_outputs = dict(seed_val_outputs)
+        seed_val_scores = dict(seed_val_scores)
         objective_scores = aggregate_objective_scores(seed_subscores)
         frontier_labels, frontier_scores = compute_frontier_dimensions(
             frontier_type,

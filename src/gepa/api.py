@@ -56,6 +56,7 @@ def optimize(
     mlflow_experiment_name: str | None = None,
     track_best_outputs: bool = False,
     display_progress_bar: bool = False,
+    frontier_type: str = "instance",
     # Reproducibility
     seed: int = 0,
     raise_on_exception: bool = True,
@@ -132,6 +133,7 @@ def optimize(
     - mlflow_tracking_uri: The tracking URI to use for MLflow.
     - mlflow_experiment_name: The experiment name to use for MLflow.
     - track_best_outputs: Whether to track the best outputs on the validation set. If True, GEPAResult will contain the best outputs obtained for each task in the validation set.
+    - frontier_type: Controls how Pareto front tracking is computed. Options: "instance", "objective", or "hybrid".
 
     # Reproducibility
     - seed: The seed to use for the random number generator.
@@ -247,7 +249,7 @@ def optimize(
 
     def evaluator(inputs, prog):
         eval_out = adapter.evaluate(inputs, prog, capture_traces=False)
-        return eval_out.outputs, eval_out.scores
+        return eval_out.outputs, eval_out.scores, getattr(eval_out, "subscores", None)
 
     merge_proposer = None
     if use_merge:
@@ -275,6 +277,7 @@ def optimize(
         track_best_outputs=track_best_outputs,
         display_progress_bar=display_progress_bar,
         raise_on_exception=raise_on_exception,
+        frontier_type=frontier_type,
         stop_callback=stop_callback,
         val_evaluation_policy=val_evaluation_policy,
     )

@@ -6,8 +6,8 @@ from collections.abc import Mapping, Sequence
 from typing import Any, Callable, Generic
 
 from gepa.core.state import (
-    GEPAState,
     FrontierType,
+    GEPAState,
     aggregate_objective_scores,
     compute_frontier_dimensions,
     initialize_gepa_state,
@@ -220,7 +220,7 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
             frontier_type=self.frontier_type,
         )
 
-        assert len(self.valset) == state.num_val_instances
+        state.num_val_instances = len(self.valset)
 
         # Log base program score
         base_val_avg, base_val_coverage = state.get_program_average(0)
