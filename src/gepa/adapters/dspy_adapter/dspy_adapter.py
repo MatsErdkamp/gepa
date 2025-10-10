@@ -23,11 +23,14 @@ class LoggerAdapter:
     def log(self, x: str):
         self.logger.info(x)
 
+
 DSPyTrace = list[tuple[Any, dict[str, Any], Prediction]]
+
 
 class ScoreWithFeedback(Prediction):
     score: float
     feedback: str
+
 
 class PredictorFeedbackFn(Protocol):
     def __call__(
@@ -52,6 +55,7 @@ class PredictorFeedbackFn(Protocol):
         The feedback is a string that is used to guide the evolution of the predictor.
         """
         ...
+
 
 class DspyAdapter(GEPAAdapter[Example, TraceData, Prediction]):
     def __init__(
@@ -94,9 +98,9 @@ class DspyAdapter(GEPAAdapter[Example, TraceData, Prediction]):
             score_value = raw_score.get("score", raw_score)
         else:
             if hasattr(raw_score, "subscores"):
-                objective_subscores = getattr(raw_score, "subscores")
+                objective_subscores = raw_score.subscores
             if hasattr(raw_score, "score"):
-                score_value = getattr(raw_score, "score")
+                score_value = raw_score.score
 
         try:
             score_float = float(score_value)
@@ -111,6 +115,7 @@ class DspyAdapter(GEPAAdapter[Example, TraceData, Prediction]):
         if capture_traces:
             # bootstrap_trace_data-like flow with trace capture
             from dspy.teleprompt.bootstrap_trace import bootstrap_trace_data
+
             trajs = bootstrap_trace_data(
                 program=program,
                 dataset=batch,
@@ -135,9 +140,7 @@ class DspyAdapter(GEPAAdapter[Example, TraceData, Prediction]):
                 scores.append(score_value)
                 subscores.append(objective_details)
 
-            normalized_subscores = (
-                subscores if any(s is not None for s in subscores) else None
-            )
+            normalized_subscores = subscores if any(s is not None for s in subscores) else None
             return EvaluationBatch(
                 outputs=outputs,
                 scores=scores,
@@ -153,7 +156,7 @@ class DspyAdapter(GEPAAdapter[Example, TraceData, Prediction]):
                 return_outputs=True,
                 failure_score=self.failure_score,
                 provide_traceback=True,
-                max_errors=len(batch) * 100
+                max_errors=len(batch) * 100,
             )
             res = evaluator(program)
             outputs = [r[1] for r in res.results]
@@ -165,9 +168,7 @@ class DspyAdapter(GEPAAdapter[Example, TraceData, Prediction]):
                 scores.append(score_value)
                 subscores.append(objective_details)
 
-            normalized_subscores = (
-                subscores if any(s is not None for s in subscores) else None
-            )
+            normalized_subscores = subscores if any(s is not None for s in subscores) else None
             return EvaluationBatch(
                 outputs=outputs,
                 scores=scores,
@@ -177,6 +178,7 @@ class DspyAdapter(GEPAAdapter[Example, TraceData, Prediction]):
 
     def make_reflective_dataset(self, candidate, eval_batch, components_to_update):
         from dspy.teleprompt.bootstrap_trace import FailedPrediction
+
         program = self.build_program(candidate)
 
         ret_d: dict[str, list[dict[str, Any]]] = {}
@@ -268,7 +270,9 @@ class DspyAdapter(GEPAAdapter[Example, TraceData, Prediction]):
                         captured_trace=trace,
                     )
                     d["Feedback"] = fb["feedback"]
-                    assert fb["score"] == module_score, f"Currently, GEPA only supports feedback functions that return the same score as the module's score. However, the module-level score is {module_score} and the feedback score is {fb.score}."
+                    assert fb["score"] == module_score, (
+                        f"Currently, GEPA only supports feedback functions that return the same score as the module's score. However, the module-level score is {module_score} and the feedback score is {fb.score}."
+                    )
                     # d['score'] = fb.score
                 items.append(d)
 

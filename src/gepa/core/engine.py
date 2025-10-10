@@ -98,12 +98,8 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
         num_metric_calls_by_discovery = state.total_num_evals
 
         eval_outputs = self._val_evaluator()(new_program)
-        valset_outputs, instance_scores, objective_breakdown = unpack_evaluation_output(
-            eval_outputs
-        )
-        valset_score = (
-            sum(instance_scores) / len(instance_scores) if instance_scores else 0.0
-        )
+        valset_outputs, instance_scores, objective_breakdown = unpack_evaluation_output(eval_outputs)
+        valset_score = sum(instance_scores) / len(instance_scores) if instance_scores else 0.0
         objective_scores = aggregate_objective_scores(objective_breakdown)
         frontier_labels, frontier_scores = compute_frontier_dimensions(
             self.frontier_type,
@@ -258,10 +254,14 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
                 old_sum = sum(proposal.subsample_scores_before or [])
                 new_sum = sum(proposal.subsample_scores_after or [])
                 if new_sum <= old_sum:
-                    self.logger.log(f"Iteration {state.i + 1}: New subsample score {new_sum} is not better than old score {old_sum}, skipping")
+                    self.logger.log(
+                        f"Iteration {state.i + 1}: New subsample score {new_sum} is not better than old score {old_sum}, skipping"
+                    )
                     continue
                 else:
-                    self.logger.log(f"Iteration {state.i + 1}: New subsample score {new_sum} is better than old score {old_sum}. Continue to full eval and add to candidate pool.")
+                    self.logger.log(
+                        f"Iteration {state.i + 1}: New subsample score {new_sum} is better than old score {old_sum}. Continue to full eval and add to candidate pool."
+                    )
 
                 # Accept: full eval + add
                 self._run_full_eval_and_add(

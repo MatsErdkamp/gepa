@@ -24,25 +24,14 @@ def log_detailed_metrics_after_discovering_new_program(
     logger.log(
         f"Iteration {gepa_state.i + 1}: Full train_val score for new program: {gepa_state.per_program_tracked_scores[new_program_idx]}"
     )
-    logger.log(
-        f"Iteration {gepa_state.i + 1}: Individual valset scores for new program: {instance_scores}"
-    )
+    logger.log(f"Iteration {gepa_state.i + 1}: Individual valset scores for new program: {instance_scores}")
     new_program_frontier = dict(zip(frontier_dimension_labels, frontier_scores, strict=False))
-    state_frontier = dict(
-        zip(gepa_state.frontier_dimension_labels, gepa_state.pareto_front_valset, strict=False)
-    )
-    logger.log(
-        f"Iteration {gepa_state.i + 1}: Frontier scores for new program: {new_program_frontier}"
-    )
-    logger.log(
-        f"Iteration {gepa_state.i + 1}: Updated frontier scores: {state_frontier}"
-    )
+    state_frontier = dict(zip(gepa_state.frontier_dimension_labels, gepa_state.pareto_front_valset, strict=False))
+    logger.log(f"Iteration {gepa_state.i + 1}: Frontier scores for new program: {new_program_frontier}")
+    logger.log(f"Iteration {gepa_state.i + 1}: Updated frontier scores: {state_frontier}")
     if gepa_state.program_objective_scores[new_program_idx]:
         logger.log(
-            "Iteration {}: Objective scores for new program: {}".format(
-                gepa_state.i + 1,
-                gepa_state.program_objective_scores[new_program_idx],
-            )
+            f"Iteration {gepa_state.i + 1}: Objective scores for new program: {gepa_state.program_objective_scores[new_program_idx]}"
         )
     frontier_avg = (
         sum(gepa_state.pareto_front_valset) / len(gepa_state.pareto_front_valset)

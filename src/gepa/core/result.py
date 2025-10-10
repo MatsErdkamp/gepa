@@ -40,6 +40,7 @@ class GEPAResult(Generic[RolloutOutput]):
     - instance_winners(t): set of candidates on the pareto front for val instance t
     - to_dict(...), save_json(...): serialization helpers
     """
+
     # Core data
     candidates: list[dict[str, str]]
     parents: list[list[int | None]]
@@ -80,10 +81,7 @@ class GEPAResult(Generic[RolloutOutput]):
         return self.candidates[self.best_idx]
 
     def to_dict(self) -> dict[str, Any]:
-        cands = [
-            dict(cand.items())
-            for cand in self.candidates
-        ]
+        cands = [dict(cand.items()) for cand in self.candidates]
 
         return dict(
             candidates=cands,
@@ -117,11 +115,13 @@ class GEPAResult(Generic[RolloutOutput]):
             per_val_instance_best_candidates=[set(s) for s in state.program_at_pareto_front_valset],
             discovery_eval_counts=list(state.num_metric_calls_by_discovery),
             frontier_type=getattr(state, "frontier_type", "instance"),
-            frontier_dimension_labels=list(getattr(
-                state,
-                "frontier_dimension_labels",
-                [f"instance:{idx}" for idx in range(len(state.program_at_pareto_front_valset))],
-            )),
+            frontier_dimension_labels=list(
+                getattr(
+                    state,
+                    "frontier_dimension_labels",
+                    [f"instance:{idx}" for idx in range(len(state.program_at_pareto_front_valset))],
+                )
+            ),
             objective_scores=[
                 dict(scores)
                 for scores in getattr(
