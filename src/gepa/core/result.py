@@ -49,6 +49,12 @@ class GEPAResult(Generic[RolloutOutput]):
     per_val_instance_best_candidates: dict[ValId, set[ProgramIdx]]
     discovery_eval_counts: list[int]
 
+    frontier_type: str = "instance"
+    frontier_dimension_labels: list[str] | None = None
+    objective_scores: list[dict[str, float]] | None = None
+    frontier_scores: dict[str, float] | None = None
+    frontier_programs: dict[str, set[int]] | None = None
+
     # Optional data
     best_outputs_valset: dict[ValId, list[tuple[ProgramIdx, RolloutOutput]]] | None = None
 
@@ -84,6 +90,11 @@ class GEPAResult(Generic[RolloutOutput]):
             parents=self.parents,
             val_aggregate_scores=self.val_aggregate_scores,
             val_subscores=self.val_subscores,
+            frontier_type=self.frontier_type,
+            frontier_dimension_labels=self.frontier_dimension_labels,
+            objective_scores=self.objective_scores,
+            frontier_scores=self.frontier_scores,
+            frontier_programs={k: list(v) for k, v in self.frontier_programs.items()} if self.frontier_programs else None,
             best_outputs_valset=self.best_outputs_valset,
             per_val_instance_best_candidates={k: list(v) for k, v in self.per_val_instance_best_candidates.items()},
             discovery_eval_counts=self.discovery_eval_counts,
@@ -109,6 +120,26 @@ class GEPAResult(Generic[RolloutOutput]):
                 val_id: set(front) for val_id, front in state.program_at_pareto_front_valset.items()
             },
             discovery_eval_counts=list(state.num_metric_calls_by_discovery),
+            frontier_type=getattr(state, "frontier_type", "instance"),
+            frontier_dimension_labels=list(
+                getattr(
+                    state,
+                    "frontier_dimension_labels",
+                    [f"instance:{idx}" for idx in range(len(state.program_at_pareto_front_valset))],
+                )
+            ),
+            objective_scores=[
+                dict(scores)
+                for scores in getattr(
+                    state,
+                    "program_objective_scores",
+                    [{} for _ in state.program_candidates],
+                )
+            ],
+            frontier_scores=dict(getattr(state, "frontier_scores", {})),
+            frontier_programs={
+                label: set(progs) for label, progs in getattr(state, "frontier_programs", {}).items()
+            },
             total_metric_calls=getattr(state, "total_num_evals", None),
             num_full_val_evals=getattr(state, "num_full_ds_evals", None),
             run_dir=run_dir,

@@ -9,11 +9,14 @@ from gepa.gepa_utils import idxmax
 def log_detailed_metrics_after_discovering_new_program(
     logger,
     gepa_state: GEPAState,
-    valset_score,
-    new_program_idx,
-    valset_subscores,
+    valset_score: float,
+    new_program_idx: int,
+    instance_scores: dict,
+    frontier_dimension_labels: list[str],
+    frontier_scores: list[float],
+    objective_scores: dict[str, float],
     experiment_tracker,
-    linear_pareto_front_program_idx,
+    linear_pareto_front_program_idx: int,
     valset_size: int,
 ):
     best_prog_as_per_agg_score = idxmax(gepa_state.per_program_tracked_scores)
@@ -27,7 +30,16 @@ def log_detailed_metrics_after_discovering_new_program(
     logger.log(
         f"Iteration {gepa_state.i + 1}: Train/val aggregate for new program: {gepa_state.per_program_tracked_scores[new_program_idx]}"
     )
-    logger.log(f"Iteration {gepa_state.i + 1}: Individual valset scores for new program: {valset_subscores}")
+    logger.log(f"Iteration {gepa_state.i + 1}: Individual valset scores for new program: {instance_scores}")
+
+    new_program_frontier = dict(zip(frontier_dimension_labels, frontier_scores, strict=False))
+    state_frontier = gepa_state.frontier_snapshot()
+    logger.log(f"Iteration {gepa_state.i + 1}: Frontier scores for new program: {new_program_frontier}")
+    logger.log(f"Iteration {gepa_state.i + 1}: Updated frontier scores: {state_frontier}")
+    if objective_scores:
+        logger.log(
+            f"Iteration {gepa_state.i + 1}: Objective scores for new program: {objective_scores}"
+        )
     logger.log(f"Iteration {gepa_state.i + 1}: New valset pareto front scores: {gepa_state.pareto_front_valset}")
 
     pareto_scores = [score for score in gepa_state.pareto_front_valset.values() if score != float("-inf")]
@@ -59,7 +71,7 @@ def log_detailed_metrics_after_discovering_new_program(
         "iteration": gepa_state.i + 1,
         "new_program_idx": new_program_idx,
         "valset_pareto_front_scores": dict(gepa_state.pareto_front_valset),
-        "individual_valset_score_new_program": dict(valset_subscores),
+        "individual_valset_score_new_program": dict(instance_scores),
         "valset_pareto_front_agg": pareto_avg,
         "valset_pareto_front_programs": {k: list(v) for k, v in gepa_state.program_at_pareto_front_valset.items()},
         "best_valset_agg_score": max(gepa_state.program_full_scores_val_set),
@@ -71,6 +83,10 @@ def log_detailed_metrics_after_discovering_new_program(
         "val_evaluated_count_new_program": coverage,
         "val_total_count": valset_size,
         "val_program_average": avg if avg is not None else None,
+        "frontier_scores_new_program": new_program_frontier,
+        "frontier_dimension_labels": list(frontier_dimension_labels),
+        "objective_scores_new_program": dict(objective_scores),
+        "frontier_scores_state": state_frontier,
     }
 
     experiment_tracker.log_metrics(metrics, step=gepa_state.i + 1)
