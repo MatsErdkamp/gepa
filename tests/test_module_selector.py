@@ -19,10 +19,15 @@ def common_mocks():
         prog_candidate_val_subscores=[[]],
         program_at_pareto_front_valset=[set()],
         num_metric_calls_by_discovery=[1],
+        frontier_type="instance",
+        frontier_dimension_labels=["instance:0"],
+        program_objective_scores=[{}],
+        total_num_evals=1,
+        num_full_ds_evals=1,
     )
 
     mock_adapter = Mock()
-    mock_adapter.evaluate.return_value = Mock(outputs=[], scores=[])
+    mock_adapter.evaluate.return_value = Mock(outputs=[], scores=[], subscores=None)
 
     return mock_run_return, mock_adapter
 
