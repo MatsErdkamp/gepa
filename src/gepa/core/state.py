@@ -137,6 +137,10 @@ class GEPAState(Generic[RolloutOutput, ValId]):
     validation_schema_version: int
     num_val_instances: int
 
+    frontier_type: FrontierType
+    frontier_dimension_labels: list[str]
+    num_val_instances: int
+
     def __init__(
         self,
         seed_candidate: dict[str, str],

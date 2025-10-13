@@ -18,7 +18,8 @@ class GEPAResult(Generic[RolloutOutput]):
     - parents: lineage info; for each candidate i, parents[i] is a list of parent indices or None
     - val_aggregate_scores: per-candidate aggregate score on the validation set (higher is better)
     - val_subscores: per-candidate per-instance scores on the validation set (len == num_val_instances)
-    - per_val_instance_best_candidates: for each val instance t, a set of candidate indices achieving the current best score on t
+    - per_val_instance_best_candidates: for each tracked frontier dimension (validation instance or objective), a set of
+      candidate indices achieving the current best score on that dimension
     - discovery_eval_counts: number of metric calls accumulated up to the discovery of each candidate
 
     Optional fields:

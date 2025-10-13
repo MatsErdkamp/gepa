@@ -37,6 +37,8 @@ def test_initialize_gepa_state_fresh_init_writes_and_counts(run_dir):
     assert isinstance(result, state_mod.GEPAState)
     assert result.num_full_ds_evals == 1
     assert result.total_num_evals == len(valset_out[1])
+    assert result.frontier_type == "instance"
+    assert result.frontier_dimension_labels == ["instance:0", "instance:1"]
     fake_logger.log.assert_not_called()
     valset_evaluator.assert_called_once_with(seed)
 
@@ -78,7 +80,18 @@ def test_gepa_state_save_and_initialize(run_dir):
     fake_logger = MagicMock()
     valset_evaluator = MagicMock(return_value=valset_out)
 
-    state = state_mod.GEPAState(seed, valset_out)
+    frontier_labels, frontier_scores = state_mod.compute_frontier_dimensions(
+        "instance", valset_out[1], {}
+    )
+    state = state_mod.GEPAState(
+        seed,
+        valset_out[0],
+        valset_out[1],
+        frontier_type="instance",
+        frontier_dimension_labels=frontier_labels,
+        base_frontier_scores=frontier_scores,
+        objective_scores={},
+    )
     state.num_full_ds_evals = 3
     state.total_num_evals = 10
     assert state.is_consistent()

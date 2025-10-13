@@ -136,13 +136,16 @@ class GEPAEngine(Generic[DataInst, Trajectory, RolloutOutput]):
         )
 
         state.num_full_ds_evals += 1
-        state.total_num_evals += len(valset_subscores)
+        state.total_num_evals += len(instance_scores)
 
         new_program_idx, linear_pareto_front_program_idx = state.update_state_with_new_program(
             parent_program_idx=parent_program_idx,
             new_program=new_program,
             valset_outputs=valset_outputs,
-            valset_subscores=valset_subscores,
+            instance_scores=instance_scores,
+            frontier_scores=frontier_scores,
+            frontier_dimension_labels=frontier_labels,
+            objective_scores=objective_scores,
             run_dir=self.run_dir,
             num_metric_calls_by_discovery_of_new_program=num_metric_calls_by_discovery,
             valset_score=valset_score,
